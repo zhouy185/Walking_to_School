@@ -47,7 +47,12 @@ npm install
 npm run dev
 ```
 
-Then open `http://localhost:5173/` in your browser.
+Then open `http://localhost:5173/` on your computer, or open the printed **Network** URL (e.g. `http://192.168.x.x:5173/`) in Safari on your **iPad or iPhone** on the same Wi-Fi network.
+
+### iPad & iPhone Touch Controls
+- **Left-thumb virtual joystick**: Walk in any direction
+- **Drag anywhere on the screen** (or hold **⬅️ Look L** / **Look R ➡️**): Look around and check both ways at intersections
+- **Tap on-screen buttons**: Switch 1st/3rd person view, show route hint, board/exit the school bus, talk to NPCs, or call a police escort home
 
 ### Other Scripts
 
@@ -79,3 +84,9 @@ Then open `http://localhost:5173/` in your browser.
 - [src/player/controls.js](file:///Users/yz/Documents/Projects/Walking/src/player/controls.js) — First/third-person movement, building collision, and look-left/right sweep tracking
 - [src/gameplay/safetyRules.js](file:///Users/yz/Documents/Projects/Walking/src/gameplay/safetyRules.js) — Safety Stars, Safety Points, road-lane countdown, and intersection checks
 - [src/ui/minimap.js](file:///Users/yz/Documents/Projects/Walking/src/ui/minimap.js) — Synchronized 2D Leaflet mini-map and OSRM route hint
+
+## License & Attribution
+
+Licensed under the **Apache License 2.0** ([LICENSE](file:///Users/yz/Documents/Projects/Walking/LICENSE)).
+
+Any copy, deployment, or derivative work must retain the copyright notice and include the attribution notice in [NOTICE](file:///Users/yz/Documents/Projects/Walking/NOTICE) acknowledging **zhouy185** as the original author.

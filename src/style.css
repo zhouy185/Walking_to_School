@@ -20,6 +20,7 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
+  touch-action: none;
 }
 
 #canvas-container canvas {
@@ -173,13 +174,13 @@ body {
   display: inline-block;
 }
 
-.hud-btn-police {
-  background: linear-gradient(135deg, #1e3a8a, #2563eb);
+.hud-btn-uber {
+  background: linear-gradient(135deg, #111827, #1f2937);
   color: #ffffff;
 }
 
-.hud-btn-police:hover {
-  background: linear-gradient(135deg, #1e40af, #1d4ed8);
+.hud-btn-uber:hover {
+  background: linear-gradient(135deg, #000000, #111827);
 }
 
 .hud-btn-view {
@@ -191,28 +192,182 @@ body {
   background: linear-gradient(135deg, #6d28d9, #5b21b6);
 }
 
-/* Intersection Look Both Ways Warning Banner */
+.hud-btn-restart {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #ffffff;
+}
+
+.hud-btn-restart:hover {
+  background: linear-gradient(135deg, #d97706, #b45309);
+}
+
+.hud-btn-avatar {
+  background: linear-gradient(135deg, #ec4899, #db2777);
+  color: #ffffff;
+}
+
+.hud-btn-avatar:hover {
+  background: linear-gradient(135deg, #db2777, #be185d);
+}
+
+/* Avatar Customizer Modal */
+.avatar-modal-card {
+  max-width: 680px;
+}
+
+.avatar-customizer-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 18px;
+  align-items: center;
+  margin: 14px 0 18px;
+  text-align: left;
+}
+
+.avatar-preview-box {
+  background: linear-gradient(180deg, #bae6fd 0%, #e0f2fe 70%, #86efac 70%, #4ade80 100%);
+  border: 3px solid #cbd5e1;
+  border-radius: 18px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#avatar-preview-canvas {
+  width: 220px;
+  height: 250px;
+  display: block;
+}
+
+.avatar-preview-hint {
+  font-size: 11px;
+  font-weight: 800;
+  color: #065f46;
+  padding: 4px 0 6px;
+}
+
+.avatar-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.avatar-group-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+  margin-bottom: 4px;
+}
+
+.avatar-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.av-chip {
+  border: 2px solid #cbd5e1;
+  background: #f8fafc;
+  color: #1e293b;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.av-chip.active {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+
+.avatar-swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.avatar-dual-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.avatar-divider {
+  color: #cbd5e1;
+  font-weight: 900;
+}
+
+.av-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 2px #cbd5e1;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+.av-swatch.active {
+  box-shadow: 0 0 0 3px #2563eb;
+  transform: scale(1.16);
+}
+
+@media (max-width: 640px) {
+  .avatar-customizer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .avatar-preview-box {
+    max-width: 220px;
+    margin: 0 auto;
+  }
+}
+
+.modal-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.modal-alt-btn {
+  padding: 14px 20px;
+  font-size: 15px;
+  border-radius: 14px;
+}
+
+/* Intersection Look Both Ways Interactive Arrow Gauge */
 .look-warning-hud {
   position: absolute;
-  top: 204px;
-  left: 16px;
-  max-width: 340px;
-  padding: 12px 16px;
-  border-radius: 16px;
+  top: 118px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 310px;
+  max-width: min(390px, 90vw);
+  padding: 12px 18px 14px;
+  border-radius: 20px;
   color: #ffffff;
-  background: linear-gradient(135deg, #ea580c, #c2410c);
+  text-align: center;
+  background: linear-gradient(135deg, rgba(234, 88, 12, 0.94), rgba(194, 65, 12, 0.95));
   border: 3px solid #fed7aa;
-  box-shadow: 0 12px 26px rgba(194, 65, 12, 0.35);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.34);
+  backdrop-filter: blur(6px);
 }
 
 .look-warning-hud.ready {
-  background: linear-gradient(135deg, #16a34a, #15803d);
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.95), rgba(21, 128, 61, 0.96));
   border-color: #bbf7d0;
-  box-shadow: 0 12px 26px rgba(21, 128, 61, 0.3);
+  box-shadow: 0 14px 32px rgba(21, 128, 61, 0.36);
 }
 
 .look-warning-title {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 900;
   line-height: 1.25;
 }
@@ -221,7 +376,55 @@ body {
   font-size: 12px;
   font-weight: 800;
   margin-top: 3px;
+  margin-bottom: 10px;
   opacity: 0.95;
+}
+
+.look-arrows-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+}
+
+.look-arrow-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.look-arrow-svg {
+  width: 112px;
+  height: 54px;
+  filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.32));
+}
+
+.look-arrow-label {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  background: rgba(15, 23, 42, 0.35);
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+.look-arrow-box.done .look-arrow-label {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.look-forward-box {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding-top: 2px;
+}
+
+.look-forward-svg {
+  width: 58px;
+  height: 68px;
+  filter: drop-shadow(0 4px 8px rgba(15, 23, 42, 0.35));
 }
 
 /* Realistic Vehicle Interior Overlay (School Bus & Police Cruiser) */
@@ -256,6 +459,7 @@ body {
   from {
     box-shadow: inset 0 -10px 28px rgba(239, 68, 68, 0.55), 0 8px 28px rgba(239, 68, 68, 0.35);
   }
+
   to {
     box-shadow: inset 0 -10px 28px rgba(59, 130, 246, 0.6), 0 8px 28px rgba(59, 130, 246, 0.4);
   }
@@ -511,6 +715,7 @@ body {
   from {
     transform: translateX(-50%) scale(1);
   }
+
   to {
     transform: translateX(-50%) scale(1.03);
   }
@@ -558,44 +763,32 @@ body {
   box-shadow: 0 12px 24px rgba(220, 38, 38, 0.45);
 }
 
-.police-banner {
+.uber-banner {
   position: absolute;
   top: 112px;
   left: 50%;
   transform: translateX(-50%);
-  background: linear-gradient(135deg, #1e3a8a, #1d4ed8);
+  background: linear-gradient(135deg, #0f172a, #1e293b);
   color: #ffffff;
-  border: 3px solid #ef4444;
+  border: 3px solid #38bdf8;
   border-radius: 18px;
   padding: 14px 24px;
-  min-width: 340px;
+  min-width: 320px;
   max-width: min(500px, 92vw);
   text-align: center;
-  box-shadow: 0 14px 36px rgba(30, 58, 138, 0.5);
-  animation: policeFlash 0.55s ease-in-out infinite alternate;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.5);
 }
 
-@keyframes policeFlash {
-  from {
-    border-color: #ef4444;
-    box-shadow: 0 12px 32px rgba(239, 68, 68, 0.45);
-  }
-  to {
-    border-color: #38bdf8;
-    box-shadow: 0 12px 32px rgba(56, 189, 248, 0.55);
-  }
-}
-
-.police-banner-title {
+.uber-banner-title {
   font-size: 18px;
   font-weight: 900;
   margin-bottom: 4px;
 }
 
-.police-banner-sub {
+.uber-banner-sub {
   font-size: 13px;
   font-weight: 700;
-  color: #e0f2fe;
+  color: #bae6fd;
 }
 
 /* Clear Traffic Light Status Banner */
@@ -722,6 +915,60 @@ body {
   font-weight: 800;
   color: #334155;
   padding: 0 4px;
+  gap: 6px;
+}
+
+.minimap-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.map-ctrl-btn {
+  border: none;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.map-ctrl-btn:hover {
+  background: #1d4ed8;
+}
+
+#minimap-wrapper.expanded {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  width: min(880px, 92vw);
+  height: min(640px, 86dvh);
+  padding: 12px;
+  z-index: 45;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.45);
+}
+
+#minimap-wrapper.expanded #minimap {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+.minimap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #334155;
+  padding: 4px 6px 0;
 }
 
 .compass-pill {
@@ -760,12 +1007,12 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  font-size: 14px;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.35);
+  font-size: 15px;
+  border: 2.5px solid #fff;
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.4);
 }
 
 .landmark-pin.start {
@@ -773,7 +1020,19 @@ body {
 }
 
 .landmark-pin.home {
-  background: #ec4899;
+  background: #db2777;
+  width: 32px;
+  height: 32px;
+  font-size: 17px;
+  border: 3px solid #ffffff;
+}
+
+.landmark-pin.school {
+  background: #16a34a;
+  width: 32px;
+  height: 32px;
+  font-size: 17px;
+  border: 3px solid #ffffff;
 }
 
 .landmark-pin.busstop {
@@ -817,6 +1076,113 @@ body {
   box-shadow: 0 10px 28px rgba(37, 99, 235, 0.45);
 }
 
+.enter-building-prompt {
+  pointer-events: auto;
+  position: absolute;
+  bottom: 198px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  color: #ffffff;
+  border: 3px solid #ffffff;
+  border-radius: 999px;
+  padding: 10px 22px;
+  font-size: 15px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(109, 40, 217, 0.45);
+}
+
+/* Public Building Interior Overlay */
+.interior-card {
+  background: #ffffff;
+  border-radius: 24px;
+  max-width: 600px;
+  width: 100%;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.45);
+  border: 3px solid #e0f2fe;
+  max-height: 92dvh;
+  overflow-y: auto;
+}
+
+.interior-scene {
+  width: 100%;
+  height: 220px;
+  overflow: hidden;
+  border-bottom: 4px solid #e2e8f0;
+}
+
+.interior-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.interior-body {
+  padding: 20px 24px 24px;
+  text-align: center;
+}
+
+.interior-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6d28d9;
+  background: #f3e8ff;
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin-bottom: 6px;
+}
+
+.interior-body h2 {
+  font-size: 24px;
+  font-weight: 900;
+  color: #0f172a;
+  margin-bottom: 2px;
+}
+
+.interior-address {
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+
+.interior-greeting {
+  font-size: 15px;
+  font-weight: 700;
+  color: #334155;
+  line-height: 1.45;
+  margin-bottom: 14px;
+}
+
+.interior-response {
+  background: #ecfdf5;
+  border: 2px solid #6ee7b7;
+  color: #065f46;
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 14px;
+}
+
+.interior-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.interior-fun-btn {
+  padding: 12px 20px;
+  font-size: 15px;
+  border-radius: 14px;
+}
+
 /* NPC Talk Prompt & Speech Dialog */
 .npc-prompt {
   pointer-events: auto;
@@ -836,6 +1202,7 @@ body {
 }
 
 .npc-dialog {
+  pointer-events: auto;
   position: absolute;
   bottom: 196px;
   left: 50%;
@@ -860,6 +1227,34 @@ body {
   font-weight: 900;
   color: #0f172a;
   margin-bottom: 6px;
+}
+
+.npc-dialog-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.npc-close-btn {
+  border: none;
+  background: #f1f5f9;
+  color: #475569;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.npc-close-btn:hover {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .npc-role-pill {
@@ -1185,4 +1580,223 @@ kbd {
 
 .hidden {
   display: none !important;
+}
+
+/* =========================================================
+   Touch Controls & Responsive Layout for iPad and iPhone
+   ========================================================= */
+.touch-controls {
+  pointer-events: none;
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 18;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.touch-look-row {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.touch-look-btn {
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: rgba(15, 23, 42, 0.72);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 10px;
+  border-radius: 999px;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-look-btn:active {
+  background: #2563eb;
+}
+
+.touch-joystick {
+  pointer-events: auto;
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.34);
+  border: 3px solid rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(4px);
+  position: relative;
+  touch-action: none;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.25);
+}
+
+.touch-joystick-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 48px;
+  height: 48px;
+  margin-left: -24px;
+  margin-top: -24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffffff, #cbd5e1);
+  border: 3px solid #2563eb;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.35);
+  transition: transform 0.04s linear;
+}
+
+.touch-drag-hint {
+  font-size: 10px;
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(15, 23, 42, 0.75);
+}
+
+/* Modal scroll support on shorter mobile screens */
+.modal-card {
+  max-height: 92dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 900px) {
+  #mission-card {
+    top: max(10px, env(safe-area-inset-top));
+    left: max(10px, env(safe-area-inset-left));
+    max-width: 210px;
+    padding: 8px 10px;
+  }
+
+  #mission-title {
+    font-size: 12px;
+    margin-bottom: 5px;
+  }
+
+  .mission-badge {
+    font-size: 9px;
+    margin-bottom: 4px;
+  }
+
+  .pill {
+    font-size: 10px;
+    padding: 3px 7px;
+  }
+
+  #stars-panel {
+    top: max(10px, env(safe-area-inset-top));
+    padding: 6px 12px;
+    min-width: 124px;
+  }
+
+  .stars-row {
+    font-size: 20px;
+    gap: 4px;
+  }
+
+  .points-pill {
+    font-size: 11px;
+  }
+
+  #actions-panel {
+    top: max(10px, env(safe-area-inset-top));
+    right: max(10px, env(safe-area-inset-right));
+    min-width: 122px;
+    padding: 7px 8px;
+    gap: 5px;
+  }
+
+  .hud-btn {
+    font-size: 11px;
+    padding: 6px 8px;
+  }
+
+  .controls-mini {
+    display: none;
+  }
+
+  #minimap-wrapper {
+    bottom: max(12px, env(safe-area-inset-bottom));
+    right: max(10px, env(safe-area-inset-right));
+    width: 162px;
+    padding: 6px;
+  }
+
+  #minimap {
+    height: 132px;
+  }
+
+  .traffic-light-hud {
+    left: max(10px, env(safe-area-inset-left));
+    max-width: 230px;
+    padding: 8px 10px;
+  }
+
+  .look-warning-hud {
+    top: 96px;
+    min-width: 260px;
+    padding: 8px 12px 10px;
+  }
+
+  .look-arrow-svg {
+    width: 92px;
+    height: 44px;
+  }
+
+  .traffic-light-title,
+  .look-warning-title {
+    font-size: 12px;
+  }
+
+  .traffic-light-sub,
+  .look-warning-sub {
+    font-size: 10px;
+  }
+
+  .cabin-dash {
+    height: 110px;
+    padding: 0 6% 10px;
+  }
+
+  .dash-wheel {
+    width: 110px;
+    height: 76px;
+    border-width: 10px;
+  }
+
+  .dash-right-handrail {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  #mission-card {
+    max-width: 148px;
+  }
+
+  #mission-title {
+    display: none;
+  }
+
+  #minimap-wrapper {
+    width: 138px;
+  }
+
+  #minimap {
+    height: 112px;
+  }
+
+  .touch-joystick {
+    width: 104px;
+    height: 104px;
+  }
+
+  .modal-card {
+    padding: 18px 16px;
+  }
+
+  .modal-card h2 {
+    font-size: 20px;
+  }
 }

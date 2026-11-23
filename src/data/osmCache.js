@@ -5,7 +5,7 @@
 
 import { chunkBoundsLatLon, chunkId } from '../geo.js';
 
-const DB_NAME = 'westdale-safe-walk-osm-v1';
+const DB_NAME = 'westdale-safe-walk-osm-v2';
 const STORE_NAME = 'chunks';
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 const MIN_REQUEST_DELAY_MS = 500;
@@ -118,8 +118,10 @@ export function fetchOverpassChunk(gx, gz) {
   way["highway"](${bbox});
   node["highway"~"traffic_signals|crossing|stop"](${bbox});
   way["building"](${bbox});
+  node["addr:housenumber"](${bbox});
   way["leisure"~"park|playground|pitch"](${bbox});
-  node["amenity"~"school|library|place_of_worship"](${bbox});
+  node["amenity"~"school|library|place_of_worship|cafe|restaurant|bakery"](${bbox});
+  node["shop"](${bbox});
 );
 out body;
 >;
@@ -179,8 +181,10 @@ export function fetchOverpassRadius(lat, lon, radiusM = 350) {
   way["highway"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
   node["highway"~"traffic_signals|crossing|stop"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
   way["building"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
+  node["addr:housenumber"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
   way["leisure"~"park|playground|pitch"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
-  node["amenity"~"school|library|place_of_worship"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
+  node["amenity"~"school|library|place_of_worship|cafe|restaurant|bakery"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
+  node["shop"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
 );
 out body;
 >;

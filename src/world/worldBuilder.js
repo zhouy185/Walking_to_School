@@ -9,7 +9,7 @@
  */
 
 import * as THREE from 'three';
-import { closestPointOnSegment2D } from '../geo.js';
+import { closestPointOnSegment2D, pointInPolygon2D } from '../geo.js';
 
 const HOUSE_COLORS = [0xfef3c7, 0xffedd5, 0xe0f2fe, 0xfce7f3, 0xe2e8f0, 0xfde68a, 0xdcfce7];
 const SHOP_COLORS = [0xfb7185, 0x38bdf8, 0xfbbf24, 0x34d399, 0xa78bfa, 0xf97316];
@@ -440,6 +440,90 @@ function createStreetSignPost(inter, mats) {
   return group;
 }
 
+function createHouseNumberPlaque(houseNumber, frontPt, frontAngle) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 160;
+  canvas.height = 80;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(0, 0, 160, 80);
+  ctx.strokeStyle = '#f8fafc';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(5, 5, 150, 70);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '900 44px system-ui, -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(houseNumber), 80, 42, 136);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.45, side: THREE.DoubleSide });
+  const plaque = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 0.66), mat);
+  plaque.position.set(frontPt.x, 2.55, frontPt.z);
+  plaque.rotation.y = frontAngle;
+  return plaque;
+}
+
+function createPublicEntrance(b, mats) {
+  const g = new THREE.Group();
+  g.position.set(b.frontPt.x, 0, b.frontPt.z);
+  g.rotation.y = b.frontAngle || 0;
+
+  // Welcoming glass doorway + bright welcome mat on the ground
+  const doorFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(1.9, 2.45, 0.22),
+    new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5 })
+  );
+  doorFrame.position.set(0, 1.25, 0.04);
+  g.add(doorFrame);
+
+  const doorGlass = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.55, 2.15),
+    new THREE.MeshStandardMaterial({
+      color: 0x7dd3fc,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.28,
+      roughness: 0.2,
+    })
+  );
+  doorGlass.position.set(0, 1.24, 0.16);
+  g.add(doorGlass);
+
+  // Welcome mat outside the door so kids know they can walk right in!
+  const matMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(2.1, 0.05, 1.15),
+    new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.85 })
+  );
+  matMesh.position.set(0, 0.18, 0.72);
+  g.add(matMesh);
+
+  // Storefront name fascia right above the door on the building wall!
+  const typeMeta = {
+    restaurant: { emoji: '🍽️', bg: '#b91c1c' },
+    cafe: { emoji: '☕', bg: '#92400e' },
+    grocery: { emoji: '🛒', bg: '#15803d' },
+    library: { emoji: '📚', bg: '#0369a1' },
+    school: { emoji: '🏫', bg: '#b91c1c' },
+    church: { emoji: '⛪', bg: '#4338ca' },
+    pharmacy: { emoji: '💊', bg: '#0f766e' },
+    bank: { emoji: '🏦', bg: '#1d4ed8' },
+    shop: { emoji: '🛍️', bg: '#7c3aed' },
+  }[b.placeType] || { emoji: '🏬', bg: '#0f766e' };
+
+  const title = b.name ? `${typeMeta.emoji} ${b.name}` : `${typeMeta.emoji} Westdale Shop`;
+  const sub = b.houseNumber ? `#${b.houseNumber} • Walk In!` : 'Public Entrance • Walk In!';
+  const signTex = makeSignTexture([title, sub], typeMeta.bg, '#ffffff', '#fde047', 640, 180);
+  const signBoard = new THREE.Mesh(
+    new THREE.BoxGeometry(4.4, 1.2, 0.16),
+    new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.4 })
+  );
+  signBoard.position.set(0, 3.35, 0.16);
+  g.add(signBoard);
+
+  return g;
+}
+
 function createLandmarkSign(text, subtitle, x, y, z, bgColor, width = 6.5) {
   const group = new THREE.Group();
   group.position.set(x, y, z);
@@ -667,12 +751,12 @@ export function buildChunkMesh(bucket, allRoads = null) {
     barB.position.set(0, 0, -(cw.depth * 0.5 + 0.85));
     cwGroup.add(barA, barB);
 
-    // Yellow curb-cut tactile pads on both sidewalk edges
-    const padGeom = new THREE.BoxGeometry(0.85, 0.03, 2.2);
+    // Yellow curb-cut waiting pads on both sidewalk edges (stand here to trigger Look Left & Right!)
+    const padGeom = new THREE.BoxGeometry(1.15, 0.04, 2.4);
     const padL = new THREE.Mesh(padGeom, mats.yellowLine);
-    padL.position.set(-cw.width / 2 - 0.45, 0.08, 0);
+    padL.position.set(-cw.width / 2 - 0.55, 0.09, 0);
     const padR = new THREE.Mesh(padGeom, mats.yellowLine);
-    padR.position.set(cw.width / 2 + 0.45, 0.08, 0);
+    padR.position.set(cw.width / 2 + 0.55, 0.09, 0);
     cwGroup.add(padL, padR);
 
     group.add(cwGroup);
@@ -716,7 +800,7 @@ export function buildChunkMesh(bucket, allRoads = null) {
 
       const sign = createLandmarkSign(
         '🏠 Your House',
-        'Walk or Catch the Bus!',
+        b.houseNumber ? `#${b.houseNumber} • Walk or Catch the Bus!` : 'Walk or Catch the Bus!',
         b.centroid.x,
         b.height + 2.4,
         b.centroid.z,
@@ -744,7 +828,7 @@ export function buildChunkMesh(bucket, allRoads = null) {
 
       const sign = createLandmarkSign(
         'Westdale Library',
-        'Hamilton Public Library',
+        b.houseNumber ? `#${b.houseNumber} King St W` : 'Hamilton Public Library',
         b.centroid.x,
         b.height + 2.4,
         b.centroid.z,
@@ -762,8 +846,15 @@ export function buildChunkMesh(bucket, allRoads = null) {
         group.add(sign);
       }
     } else if (b.category === 'shop' && b.name) {
-      const sign = createLandmarkSign(b.name, '', b.centroid.x, b.height + 1.8, b.centroid.z, '#0f766e', 5.8);
+      const sign = createLandmarkSign(b.name, b.houseNumber ? `#${b.houseNumber}` : '', b.centroid.x, b.height + 1.8, b.centroid.z, '#0f766e', 5.8);
       group.add(sign);
+    }
+
+    // Show street number plaque on every house/building facade, and welcoming entrance on public places!
+    if (b.isPublicAccess && b.frontPt) {
+      group.add(createPublicEntrance(b, mats));
+    } else if (b.houseNumber && b.frontPt) {
+      group.add(createHouseNumberPlaque(b.houseNumber, b.frontPt, b.frontAngle || 0));
     }
   }
 
@@ -785,9 +876,9 @@ export function buildChunkMesh(bucket, allRoads = null) {
 }
 
 /**
- * Creates the glowing destination plaza & spinning star beacon at Cootes Paradise Elementary School entrance.
+ * Creates the glowing destination plaza & spinning star beacon at the chosen School / Destination.
  */
-export function createSchoolBeacon(x, z) {
+export function createSchoolBeacon(x, z, title = '🎯 Destination', subtitle = 'Cootes Paradise Elementary') {
   const group = new THREE.Group();
   group.position.set(x, 0, z);
 
@@ -836,15 +927,7 @@ export function createSchoolBeacon(x, z) {
   beam.position.y = 11;
   group.add(beam);
 
-  const sign = createLandmarkSign(
-    '🏫 School Entrance',
-    'Cootes Paradise Elementary',
-    0,
-    5.4,
-    0,
-    '#15803d',
-    6.8
-  );
+  const sign = createLandmarkSign(title, subtitle, 0, 5.4, 0, '#15803d', 7.2);
   sign.name = 'beaconSign';
   group.add(sign);
 
@@ -994,17 +1077,42 @@ export function createHomeWalkway(parsed, customHomeXZ = null, homeSubtitle = 'W
     z: best.z - uz * sidewalkOffset,
   };
 
-  // If the geocoded address is already right on the street/sidewalk, build a short 4m pad
-  const frontDoor =
-    len > sidewalkOffset + 3.0
-      ? {
-          x: homeCentroid.x + ux * Math.min(6.0, len * 0.4),
-          z: homeCentroid.z + uz * Math.min(6.0, len * 0.4),
-        }
-      : {
-          x: sidewalkPt.x - ux * 3.5,
-          z: sidewalkPt.z - uz * 3.5,
-        };
+  // Start the front door strictly OUTSIDE every building polygon so large apartment/condo
+  // buildings (like 35 Charles St W) never trap the player inside their walls!
+  const isInsideAnyBuilding = (px, pz) => {
+    for (const b of parsed.buildings || []) {
+      if (
+        px >= b.bbox.minX - 0.6 &&
+        px <= b.bbox.maxX + 0.6 &&
+        pz >= b.bbox.minZ - 0.6 &&
+        pz <= b.bbox.maxZ + 0.6 &&
+        pointInPolygon2D(px, pz, b.polygon)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  let spawnX = sidewalkPt.x;
+  let spawnZ = sidewalkPt.z;
+  // Walk slightly back toward the house only if that point is strictly outside all buildings
+  const tryMidX = sidewalkPt.x - ux * 1.4;
+  const tryMidZ = sidewalkPt.z - uz * 1.4;
+  if (!isInsideAnyBuilding(tryMidX, tryMidZ)) {
+    spawnX = tryMidX;
+    spawnZ = tryMidZ;
+  }
+  // If even sidewalkPt happens to overlap a huge building, nudge toward the road edge until free
+  for (let step = 0; step < 8 && isInsideAnyBuilding(spawnX, spawnZ); step++) {
+    spawnX += ux * 1.2;
+    spawnZ += uz * 1.2;
+  }
+
+  const frontDoor = {
+    x: spawnX - ux * 1.2,
+    z: spawnZ - uz * 1.2,
+  };
 
   const pts = [frontDoor, sidewalkPt];
   paths.push({ name: 'Your House Walkway', points: pts });
@@ -1017,8 +1125,6 @@ export function createHomeWalkway(parsed, customHomeXZ = null, homeSubtitle = 'W
   walkMesh.receiveShadow = true;
   group.add(walkMesh);
 
-  const spawnX = (frontDoor.x + sidewalkPt.x) * 0.5;
-  const spawnZ = (frontDoor.z + sidewalkPt.z) * 0.5;
   const headingDeg = ((Math.atan2(ux, -uz) * 180) / Math.PI + 360) % 360;
 
   return {
@@ -1136,44 +1242,39 @@ export function createBusStops(parsed, destXZ) {
 }
 
 /**
- * Creates a friendly low-poly 3D Police Cruiser with flashing red & blue roof lightbar
- * for mandatory safety escorts back to Your House.
+ * Creates a sleek black low-poly 3D Uber Sedan with a glowing roof UBER sign.
  */
-export function createPoliceCarMesh() {
+export function createUberCarMesh() {
   const g = new THREE.Group();
-  g.name = 'policeCar';
+  g.name = 'uberCar';
 
-  // White cruiser body + navy doors/hood stripe
   const body = new THREE.Mesh(
-    new THREE.BoxGeometry(2.0, 0.78, 4.4),
-    new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 })
+    new THREE.BoxGeometry(2.0, 0.76, 4.4),
+    new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.35, metalness: 0.25 })
   );
-  body.position.y = 0.7;
+  body.position.y = 0.68;
   body.castShadow = true;
   g.add(body);
 
-  const stripe = new THREE.Mesh(
-    new THREE.BoxGeometry(2.04, 0.28, 4.42),
-    new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.5 })
+  const trim = new THREE.Mesh(
+    new THREE.BoxGeometry(2.04, 0.14, 4.42),
+    new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.4 })
   );
-  stripe.position.y = 0.68;
-  g.add(stripe);
+  trim.position.y = 0.62;
+  g.add(trim);
 
   const cabin = new THREE.Mesh(
-    new THREE.BoxGeometry(1.7, 0.65, 2.2),
-    new THREE.MeshStandardMaterial({ color: 0xbae6fd, roughness: 0.25 })
+    new THREE.BoxGeometry(1.7, 0.62, 2.2),
+    new THREE.MeshStandardMaterial({ color: 0xbae6fd, roughness: 0.22 })
   );
-  cabin.position.set(0, 1.38, -0.1);
+  cabin.position.set(0, 1.34, -0.1);
   g.add(cabin);
 
-  // Roof lightbar (red left, blue right)
-  const redLightMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
-  const blueLightMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6 });
-  const redLamp = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.18, 0.28), redLightMat);
-  redLamp.position.set(-0.32, 1.8, -0.1);
-  const blueLamp = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.18, 0.28), blueLightMat);
-  blueLamp.position.set(0.32, 1.8, -0.1);
-  g.add(redLamp, blueLamp);
+  // Glowing roof beacon sign
+  const beaconMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+  const beacon = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.22, 0.32), beaconMat);
+  beacon.position.set(0, 1.76, -0.1);
+  g.add(beacon);
 
   // Wheels
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 });
@@ -1187,24 +1288,40 @@ export function createPoliceCarMesh() {
     }
   }
 
-  g.userData = { redLightMat, blueLightMat };
+  g.userData = { beaconMat };
   return g;
 }
 
+export const DEFAULT_AVATAR_CONFIG = {
+  skinColor: '#ffdbac',
+  hairStyle: 'cap', // 'short' | 'long' | 'pigtails' | 'curly' | 'cap'
+  hairColor: '#3b2f2f',
+  outfitStyle: 'hoodie', // 'hoodie' | 'tshirt' | 'jacket'
+  topColor: '#ef4444',
+  pantsColor: '#1e3a8a',
+  backpackColor: '#facc15',
+};
+
 /**
- * Creates a cheerful low-poly Student Avatar (with backpack, hoodie, cap & animated limbs)
- * shown when the player switches to Third-Person View.
+ * Creates a cheerful, customizable low-poly Student Avatar with a 3D face
+ * (eyes, eyebrows, nose, ears, smiling mouth, rosy cheeks), selectable hairstyle,
+ * outfit style, colors, and animated walking limbs.
  */
-export function createPlayerAvatarMesh() {
+export function createPlayerAvatarMesh(rawConfig = {}) {
+  const cfg = { ...DEFAULT_AVATAR_CONFIG, ...rawConfig };
   const g = new THREE.Group();
   g.name = 'playerAvatar';
 
-  const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.8 });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: cfg.pantsColor, roughness: 0.8 });
   const shoeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
-  const hoodieMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.65 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.6 });
-  const capMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.7 });
-  const packMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.6 });
+  const topMat = new THREE.MeshStandardMaterial({ color: cfg.topColor, roughness: 0.65 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: cfg.skinColor, roughness: 0.6 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: cfg.hairColor, roughness: 0.82 });
+  const packMat = new THREE.MeshStandardMaterial({ color: cfg.backpackColor, roughness: 0.6 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.4 });
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+  const blushMat = new THREE.MeshStandardMaterial({ color: 0xfb7185, roughness: 0.8 });
+  const mouthMat = new THREE.MeshStandardMaterial({ color: 0xbe123c, roughness: 0.6 });
 
   // Legs with hip pivots
   const leftLegPivot = new THREE.Group();
@@ -1227,48 +1344,180 @@ export function createPlayerAvatarMesh() {
   rightLegPivot.add(rightLeg, rightShoe);
   g.add(rightLegPivot);
 
-  // Torso (red school hoodie)
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.58, 0.28), hoodieMat);
+  // Torso (hoodie, t-shirt, or zip-up jacket)
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.58, 0.28), topMat);
   torso.position.y = 0.87;
   torso.castShadow = true;
   g.add(torso);
 
-  // Bright yellow school backpack on the back (-Z is back when facing +Z)
-  const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.44, 0.18), packMat);
+  if (cfg.outfitStyle === 'jacket') {
+    const zipStripe = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.57, 0.295), whiteMat);
+    zipStripe.position.y = 0.87;
+    g.add(zipStripe);
+  } else if (cfg.outfitStyle === 'hoodie') {
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.16, 0.14), topMat);
+    hood.position.set(0, 1.12, -0.15);
+    g.add(hood);
+  }
+
+  // Neck
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.095, 0.12, 10), skinMat);
+  neck.position.y = 1.19;
+  g.add(neck);
+
+  // School backpack on the back (-Z is back when facing +Z)
+  const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.42, 0.17), packMat);
   backpack.position.set(0, 0.88, -0.22);
   backpack.castShadow = true;
   g.add(backpack);
 
-  // Arms with shoulder pivots
-  const leftArmPivot = new THREE.Group();
-  leftArmPivot.position.set(-0.32, 1.1, 0);
-  const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.48, 0.15), hoodieMat);
-  leftArm.position.y = -0.22;
-  leftArmPivot.add(leftArm);
-  g.add(leftArmPivot);
+  // Arms with shoulder pivots (short sleeves for t-shirt, full sleeves for hoodie/jacket + cute hands)
+  const buildArm = (xPos) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(xPos, 1.1, 0);
+    if (cfg.outfitStyle === 'tshirt') {
+      const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 0.16), topMat);
+      sleeve.position.y = -0.08;
+      const lowerArm = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.28, 0.13), skinMat);
+      lowerArm.position.y = -0.3;
+      pivot.add(sleeve, lowerArm);
+    } else {
+      const fullArm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.44, 0.15), topMat);
+      fullArm.position.y = -0.2;
+      pivot.add(fullArm);
+    }
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), skinMat);
+    hand.position.y = -0.46;
+    pivot.add(hand);
+    return pivot;
+  };
+  const leftArmPivot = buildArm(-0.32);
+  const rightArmPivot = buildArm(0.32);
+  g.add(leftArmPivot, rightArmPivot);
 
-  const rightArmPivot = new THREE.Group();
-  rightArmPivot.position.set(0.32, 1.1, 0);
-  const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.48, 0.15), hoodieMat);
-  rightArm.position.y = -0.22;
-  rightArmPivot.add(rightArm);
-  g.add(rightArmPivot);
-
-  // Head + baseball cap (faces +Z)
+  // Head + Expressive 3D Face (faces +Z)
   const headGroup = new THREE.Group();
-  headGroup.position.set(0, 1.37, 0);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), skinMat);
+  headGroup.position.set(0, 1.43, 0);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 14), skinMat);
   head.castShadow = true;
   headGroup.add(head);
 
-  const capDome = new THREE.Mesh(
-    new THREE.SphereGeometry(0.23, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.52),
-    capMat
-  );
-  capDome.position.y = 0.03;
-  const capBrim = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.2), capMat);
-  capBrim.position.set(0, 0.06, 0.2);
-  headGroup.add(capDome, capBrim);
+  // Ears (left & right)
+  const earGeom = new THREE.SphereGeometry(0.055, 10, 8);
+  earGeom.scale(0.65, 1.0, 0.85);
+  const leftEar = new THREE.Mesh(earGeom, skinMat);
+  leftEar.position.set(-0.23, -0.01, 0.01);
+  const rightEar = new THREE.Mesh(earGeom, skinMat);
+  rightEar.position.set(0.23, -0.01, 0.01);
+  headGroup.add(leftEar, rightEar);
+
+  // Eyes (white sclera + dark pupils + shiny catchlights + eyebrows)
+  for (const sx of [-0.085, 0.085]) {
+    const eyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.044, 10, 10), whiteMat);
+    eyeWhite.position.set(sx, 0.035, 0.205);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 10), darkMat);
+    pupil.position.set(sx, 0.035, 0.232);
+    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 6), whiteMat);
+    glint.position.set(sx + 0.01, 0.047, 0.248);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.018, 0.02), hairMat);
+    brow.position.set(sx, 0.095, 0.215);
+    headGroup.add(eyeWhite, pupil, glint, brow);
+  }
+
+  // Cute 3D Nose
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), skinMat);
+  nose.scale.set(0.95, 0.85, 1.2);
+  nose.position.set(0, -0.015, 0.238);
+  headGroup.add(nose);
+
+  // Rosy Cheeks
+  for (const sx of [-0.13, 0.13]) {
+    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 8), blushMat);
+    cheek.scale.set(1.1, 0.7, 0.4);
+    cheek.position.set(sx, -0.04, 0.205);
+    headGroup.add(cheek);
+  }
+
+  // Smiling Mouth (3D curved arc)
+  const smileGeom = new THREE.TorusGeometry(0.06, 0.014, 8, 16, Math.PI * 0.82);
+  const mouth = new THREE.Mesh(smileGeom, mouthMat);
+  mouth.position.set(0, -0.065, 0.212);
+  mouth.rotation.z = Math.PI * 1.09;
+  headGroup.add(mouth);
+
+  // Selectable Hairstyles
+  if (cfg.hairStyle === 'cap') {
+    const capMat = new THREE.MeshStandardMaterial({ color: cfg.topColor, roughness: 0.7 });
+    const hairBack = new THREE.Mesh(
+      new THREE.SphereGeometry(0.248, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.58),
+      hairMat
+    );
+    hairBack.position.y = 0.02;
+    const capDome = new THREE.Mesh(
+      new THREE.SphereGeometry(0.256, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.48),
+      capMat
+    );
+    capDome.position.y = 0.045;
+    const capBrim = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.04, 0.22), capMat);
+    capBrim.position.set(0, 0.075, 0.22);
+    headGroup.add(hairBack, capDome, capBrim);
+  } else if (cfg.hairStyle === 'long') {
+    const hairTop = new THREE.Mesh(
+      new THREE.SphereGeometry(0.255, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.56),
+      hairMat
+    );
+    hairTop.position.y = 0.025;
+    const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.16), hairMat);
+    hairBack.position.set(0, -0.14, -0.17);
+    const sideL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.38, 0.18), hairMat);
+    sideL.position.set(-0.22, -0.1, -0.03);
+    const sideR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.38, 0.18), hairMat);
+    sideR.position.set(0.22, -0.1, -0.03);
+    headGroup.add(hairTop, hairBack, sideL, sideR);
+  } else if (cfg.hairStyle === 'pigtails') {
+    const hairTop = new THREE.Mesh(
+      new THREE.SphereGeometry(0.255, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.56),
+      hairMat
+    );
+    hairTop.position.y = 0.025;
+    const puffGeom = new THREE.SphereGeometry(0.135, 12, 10);
+    const puffL = new THREE.Mesh(puffGeom, hairMat);
+    puffL.position.set(-0.29, 0.06, -0.05);
+    const puffR = new THREE.Mesh(puffGeom, hairMat);
+    puffR.position.set(0.29, 0.06, -0.05);
+    const tieMat = new THREE.MeshStandardMaterial({ color: cfg.backpackColor, roughness: 0.5 });
+    const tieL = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.018, 6, 12), tieMat);
+    tieL.position.set(-0.24, 0.06, -0.04);
+    tieL.rotation.y = Math.PI / 2;
+    const tieR = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.018, 6, 12), tieMat);
+    tieR.position.set(0.24, 0.06, -0.04);
+    tieR.rotation.y = Math.PI / 2;
+    headGroup.add(hairTop, puffL, puffR, tieL, tieR);
+  } else if (cfg.hairStyle === 'curly') {
+    const curlOffsets = [
+      [0, 0.2, 0], [-0.14, 0.17, 0.04], [0.14, 0.17, 0.04],
+      [-0.2, 0.08, -0.05], [0.2, 0.08, -0.05], [0, 0.14, -0.16],
+      [-0.14, 0.08, -0.16], [0.14, 0.08, -0.16], [0, 0.21, 0.1],
+    ];
+    const curlGeom = new THREE.SphereGeometry(0.115, 10, 8);
+    for (const [cx, cy, cz] of curlOffsets) {
+      const c = new THREE.Mesh(curlGeom, hairMat);
+      c.position.set(cx, cy, cz);
+      headGroup.add(c);
+    }
+  } else {
+    // 'short' classic hair
+    const hairTop = new THREE.Mesh(
+      new THREE.SphereGeometry(0.255, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.54),
+      hairMat
+    );
+    hairTop.position.y = 0.03;
+    const bangs = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.07, 0.1), hairMat);
+    bangs.position.set(0, 0.16, 0.17);
+    headGroup.add(hairTop, bangs);
+  }
+
   g.add(headGroup);
 
   g.userData = { leftLegPivot, rightLegPivot, leftArmPivot, rightArmPivot, headGroup };

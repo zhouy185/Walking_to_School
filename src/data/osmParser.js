@@ -255,6 +255,14 @@ export function parseOsmElements(elements) {
     }
   }
 
+  // Also collect standalone address nodes so nearby buildings inherit real street numbers
+  const addrNodes = [];
+  for (const node of nodeMap.values()) {
+    if (node.tags['addr:housenumber']) {
+      addrNodes.push(node);
+    }
+  }
+
   const roads = [];
   const footways = [];
   const rawBuildings = [];
@@ -335,11 +343,20 @@ export function parseOsmElements(elements) {
     road.hasExplicitLeftSidewalk = false;
   }
 
-  // Classify buildings & attach landmark names
+  // Classify buildings, attach landmark names, real OSM street numbers,
+  // street-facing facade orientation, and public-access placeType!
+  const nonServiceRoads = roads.filter((r) => r.highway !== 'service' && r.points.length >= 2);
+  const usedPoiIds = new Set();
+  const usedAddrIds = new Set();
+
   const buildings = rawBuildings.map((b) => {
-    const t = b.tags;
+    const t = { ...b.tags };
     let name = t.name || '';
+    let houseNumber = t['addr:housenumber'] || '';
+    let streetAddr = t['addr:street'] || '';
     let category = 'house';
+    let placeType = 'house';
+    let isPublicAccess = false;
     let height = 7.0;
 
     if (!name && (t.building === 'school' || dist2D(b.centroid.x, b.centroid.z, 0, 0) < 45)) {
@@ -353,34 +370,153 @@ export function parseOsmElements(elements) {
 
     if (!name && t.building === 'school' && dist2D(b.centroid.x, b.centroid.z, 0, 0) < 60) {
       name = 'Cootes Paradise Elementary School';
+      houseNumber = houseNumber || '900';
+      streetAddr = streetAddr || 'King Street West';
     }
 
+    // Match POI node inside building (or very close within 10m if unnamed)
     if (!name) {
+      let bestPoi = null;
+      let bestPoiDist = Infinity;
       for (const poi of poiNodes) {
-        if (
+        if (usedPoiIds.has(poi.id)) continue;
+        const inside =
           poi.x >= b.bbox.minX - 2 &&
           poi.x <= b.bbox.maxX + 2 &&
           poi.z >= b.bbox.minZ - 2 &&
           poi.z <= b.bbox.maxZ + 2 &&
-          pointInPolygon2D(poi.x, poi.z, b.polygon)
-        ) {
-          name = poi.tags.name;
-          if (!t.shop && poi.tags.shop) t.shop = poi.tags.shop;
-          if (!t.amenity && poi.tags.amenity) t.amenity = poi.tags.amenity;
+          pointInPolygon2D(poi.x, poi.z, b.polygon);
+        if (inside) {
+          bestPoi = poi;
+          bestPoiDist = 0;
           break;
+        }
+        const d = dist2D(poi.x, poi.z, b.centroid.x, b.centroid.z);
+        if (d < 13 && d < bestPoiDist) {
+          bestPoiDist = d;
+          bestPoi = poi;
+        }
+      }
+      if (bestPoi) {
+        usedPoiIds.add(bestPoi.id);
+        name = bestPoi.tags.name;
+        if (!t.shop && bestPoi.tags.shop) t.shop = bestPoi.tags.shop;
+        if (!t.amenity && bestPoi.tags.amenity) t.amenity = bestPoi.tags.amenity;
+        if (!houseNumber && bestPoi.tags['addr:housenumber']) {
+          houseNumber = bestPoi.tags['addr:housenumber'];
+        }
+        if (!streetAddr && bestPoi.tags['addr:street']) {
+          streetAddr = bestPoi.tags['addr:street'];
+        }
+      }
+    }
+
+    // Inherit real OSM addr:housenumber from standalone address node (inside polygon first, else closest edge within 10m)
+    if (!houseNumber && addrNodes.length > 0) {
+      let bestAddr = null;
+      let bestAddrDist = Infinity;
+      for (const an of addrNodes) {
+        if (usedAddrIds.has(an.id)) continue;
+        if (
+          an.x >= b.bbox.minX - 1.5 &&
+          an.x <= b.bbox.maxX + 1.5 &&
+          an.z >= b.bbox.minZ - 1.5 &&
+          an.z <= b.bbox.maxZ + 1.5 &&
+          pointInPolygon2D(an.x, an.z, b.polygon)
+        ) {
+          bestAddr = an;
+          bestAddrDist = 0;
+          break;
+        }
+        // Quick bbox reject before checking exact polygon edge distance
+        if (
+          an.x < b.bbox.minX - 11 ||
+          an.x > b.bbox.maxX + 11 ||
+          an.z < b.bbox.minZ - 11 ||
+          an.z > b.bbox.maxZ + 11
+        ) {
+          continue;
+        }
+        let edgeDist = Infinity;
+        for (let i = 0; i < b.polygon.length; i++) {
+          const p1 = b.polygon[i];
+          const p2 = b.polygon[(i + 1) % b.polygon.length];
+          const h = closestPointOnSegment2D(an.x, an.z, p1.x, p1.z, p2.x, p2.z);
+          if (h.dist < edgeDist) edgeDist = h.dist;
+        }
+        if (edgeDist < 10.5 && edgeDist < bestAddrDist) {
+          bestAddrDist = edgeDist;
+          bestAddr = an;
+        }
+      }
+      if (bestAddr) {
+        usedAddrIds.add(bestAddr.id);
+        houseNumber = bestAddr.tags['addr:housenumber'];
+        streetAddr = streetAddr || bestAddr.tags['addr:street'] || '';
+      }
+    }
+
+    // Find nearest street segment & facade point facing the street
+    let nearestRoadHit = null;
+    let nearestRoad = null;
+    for (const r of nonServiceRoads) {
+      for (let i = 0; i < r.points.length - 1; i++) {
+        const a = r.points[i];
+        const c = r.points[i + 1];
+        const hit = closestPointOnSegment2D(b.centroid.x, b.centroid.z, a.x, a.z, c.x, c.z);
+        if (!nearestRoadHit || hit.dist < nearestRoadHit.dist) {
+          nearestRoadHit = hit;
+          nearestRoad = r;
+        }
+      }
+    }
+
+    if (!streetAddr && nearestRoad?.name) {
+      streetAddr = nearestRoad.name;
+    }
+
+    // Find building polygon edge closest to the nearest street and push outward along
+    // the edge's true outward normal so plaques & doors never clip inside the wall!
+    let frontPt = { x: b.centroid.x, z: b.centroid.z };
+    let frontAngle = 0;
+    if (nearestRoadHit) {
+      let bestEdgeDist = Infinity;
+      const poly = b.polygon;
+      for (let i = 0; i < poly.length; i++) {
+        const p1 = poly[i];
+        const p2 = poly[(i + 1) % poly.length];
+        const edx = p2.x - p1.x;
+        const edz = p2.z - p1.z;
+        const elen = Math.hypot(edx, edz);
+        if (elen < 1.0) continue;
+        const mx = (p1.x + p2.x) * 0.5;
+        const mz = (p1.z + p2.z) * 0.5;
+        const d = dist2D(mx, mz, nearestRoadHit.x, nearestRoadHit.z);
+        if (d < bestEdgeDist) {
+          bestEdgeDist = d;
+          // Compute outward perpendicular normal to edge (p1 -> p2) pointing toward street
+          let nx = -edz / elen;
+          let nz = edx / elen;
+          const toStreetX = nearestRoadHit.x - mx;
+          const toStreetZ = nearestRoadHit.z - mz;
+          if (nx * toStreetX + nz * toStreetZ < 0) {
+            nx = -nx;
+            nz = -nz;
+          }
+          frontPt = { x: mx + nx * 0.35, z: mz + nz * 0.35 };
+          frontAngle = Math.atan2(nx, nz);
         }
       }
     }
 
     const lowerName = name.toLowerCase();
-    const isNearKing = roads.some(
-      (r) =>
-        /king street/i.test(r.name) &&
-        r.points.some((p) => dist2D(p.x, p.z, b.centroid.x, b.centroid.z) < 34)
-    );
+    const isNearKing = nearestRoad && /king street/i.test(nearestRoad.name) && nearestRoadHit.dist < 32;
+    const shopTag = (t.shop || '').toLowerCase();
+    const amenTag = (t.amenity || '').toLowerCase();
 
     if (b.id === 836552889) {
       category = 'home';
+      placeType = 'home';
       name = 'Your House';
       height = 7.5;
     } else if (
@@ -388,34 +524,82 @@ export function parseOsmElements(elements) {
       (t.building === 'school' && dist2D(b.centroid.x, b.centroid.z, 0, 0) < 70)
     ) {
       category = 'school';
+      placeType = 'school';
+      isPublicAccess = true;
       name = name || 'Cootes Paradise Elementary School';
+      houseNumber = '900';
       height = 10.5;
     } else if (t.building === 'school' || lowerName.includes('school')) {
       category = 'other_school';
+      placeType = 'school';
+      isPublicAccess = true;
       height = 12.0;
-    } else if (t.amenity === 'library' || lowerName.includes('library')) {
+    } else if (amenTag === 'library' || lowerName.includes('library')) {
       category = 'library';
+      placeType = 'library';
+      isPublicAccess = true;
       name = 'Westdale Library';
       height = 9.0;
     } else if (
       t.building === 'church' ||
-      t.amenity === 'place_of_worship' ||
+      amenTag === 'place_of_worship' ||
       lowerName.includes('church') ||
       lowerName.includes('synagogue')
     ) {
       category = 'church';
+      placeType = 'church';
+      isPublicAccess = true;
       height = 12.5;
     } else if (
-      t.shop ||
+      ['supermarket', 'convenience', 'butcher', 'greengrocer', 'grocery'].includes(shopTag) ||
+      /food basics|foodmart|market|grocery/i.test(name)
+    ) {
+      category = 'shop';
+      placeType = 'grocery';
+      isPublicAccess = true;
+      height = t['building:levels'] ? Math.max(6, Number(t['building:levels']) * 3.5) : 8.2;
+    } else if (
+      amenTag === 'restaurant' ||
+      amenTag === 'fast_food' ||
+      /restaurant|eatery|pizzaiolo|dragon court|snooty fox|burnt tongue|spicy master|delicatessen/i.test(name)
+    ) {
+      category = 'shop';
+      placeType = 'restaurant';
+      isPublicAccess = true;
+      height = t['building:levels'] ? Math.max(6, Number(t['building:levels']) * 3.5) : 8.0;
+    } else if (
+      amenTag === 'cafe' ||
+      shopTag === 'bakery' ||
+      /cafe|café|coffee|tim hortons|bakery|cuppa tea/i.test(name)
+    ) {
+      category = 'shop';
+      placeType = 'cafe';
+      isPublicAccess = true;
+      height = t['building:levels'] ? Math.max(6, Number(t['building:levels']) * 3.5) : 7.8;
+    } else if (amenTag === 'pharmacy' || /shoppers drug mart|pharmacy/i.test(name)) {
+      category = 'shop';
+      placeType = 'pharmacy';
+      isPublicAccess = true;
+      height = 8.0;
+    } else if (amenTag === 'bank' || /cibc|td canada|bank/i.test(name)) {
+      category = 'shop';
+      placeType = 'bank';
+      isPublicAccess = true;
+      height = 8.5;
+    } else if (
+      shopTag ||
       t.building === 'retail' ||
       t.building === 'commercial' ||
-      ['cafe', 'restaurant', 'bank', 'pharmacy', 'dentist'].includes(t.amenity) ||
+      amenTag === 'dentist' ||
       isNearKing
     ) {
       category = 'shop';
+      placeType = 'shop';
+      isPublicAccess = Boolean(name || shopTag || t.building === 'retail' || t.building === 'commercial');
       height = t['building:levels'] ? Math.max(6, Number(t['building:levels']) * 3.5) : 8.0;
     } else {
       category = 'house';
+      placeType = 'house';
       const levels = Number(t['building:levels']) || 2;
       height = Math.min(11, Math.max(5.5, levels * 3.1 + (b.id % 5) * 0.35));
     }
@@ -423,7 +607,13 @@ export function parseOsmElements(elements) {
     return {
       ...b,
       name,
+      houseNumber,
+      streetAddr,
+      frontPt,
+      frontAngle,
       category,
+      placeType,
+      isPublicAccess,
       height,
     };
   });

@@ -9,7 +9,7 @@
  * - Tracks mission progress and destination arrival at Cootes Paradise Elementary School
  */
 
-import { closestPointOnSegment2D, dist2D, pointInPolygon2D } from '../geo.js';
+import { closestPointOnSegment2D, dist2D, pointInPolygon2D, forwardToHeadingDeg } from '../geo.js';
 
 const INVULN_COOLDOWN_MS = 3000;
 const ARRIVAL_RADIUS_M = 11.5;
@@ -32,6 +32,11 @@ export class SafetyRules {
     this.schoolGrounds = (parsed.parks || []).filter((p) => p.kind === 'school_grounds');
   }
 
+  setDestination(destXZ, destName = 'Destination') {
+    this.destinationXZ = { x: destXZ.x, z: destXZ.z };
+    this.destinationName = destName;
+  }
+
   reset() {
     this.stars = 3;
     this.points = 100;
@@ -50,22 +55,52 @@ export class SafetyRules {
   }
 
   /**
-   * Finds the closest unsignalized intersection crosswalk within `maxDist` meters
-   * so the HUD can proactively warn the player if they haven't looked BOTH left & right yet!
+   * Returns the unsignalized crosswalk ONLY when the player is standing right on one of its
+   * two yellow curb-cut waiting pads at the sidewalk edge (never early down the block!).
    */
-  getNearbyUnsignalizedCrosswalk(playerPos, maxDist = 11.5) {
+  getCrosswalkAtYellowPad(playerPos, headingDeg = null, preferId = null) {
     if (!playerPos) return null;
+    const hRad = headingDeg == null ? 0 : (headingDeg * Math.PI) / 180;
+    const fx = Math.sin(hRad);
+    const fz = -Math.cos(hRad);
+
     let best = null;
-    let bestDist = Infinity;
+    let preferred = null;
     for (const cw of this.parsed.crosswalks) {
       if (cw.isSignalized) continue;
-      const d = dist2D(playerPos.x, playerPos.z, cw.x, cw.z);
-      if (d <= maxDist && d < bestDist) {
-        bestDist = d;
-        best = cw;
-      }
+      const dx = playerPos.x - cw.x;
+      const dz = playerPos.z - cw.z;
+      const along = dx * cw.roadDirX + dz * cw.roadDirZ;
+      const across = -dx * cw.roadDirZ + dz * cw.roadDirX;
+      const half = cw.width * 0.5;
+      const absAcross = Math.abs(across);
+
+      // Pad zone sits entirely on the sidewalk side of the curb (never overlaps the crosswalk zone)
+      if (Math.abs(along) > 1.7 || absAcross < half - 0.2 || absAcross > half + 1.9) continue;
+
+      // Direction straight across the road from this pad
+      const side = Math.sign(across) || 1;
+      const crossX = side * cw.roadDirZ;
+      const crossZ = -side * cw.roadDirX;
+      const dot = headingDeg == null ? 1 : fx * crossX + fz * crossZ;
+      const candidate = { cw, dot, crossHeadingDeg: forwardToHeadingDeg(crossX, crossZ) };
+
+      if (cw.id === preferId) preferred = candidate;
+      if (!best || dot > best.dot) best = candidate;
     }
-    return best;
+
+    // Stay locked to the active crosswalk while looking around (hysteresis),
+    // otherwise only start when clearly facing across the street (within ~60°).
+    if (preferred && preferred.dot > -0.2) return preferred;
+    if (best && best.dot > 0.5) return best;
+    return null;
+  }
+
+  /**
+   * Backwards-compatible alias returning just the crosswalk.
+   */
+  getNearbyUnsignalizedCrosswalk(playerPos, headingDeg = null) {
+    return this.getCrosswalkAtYellowPad(playerPos, headingDeg)?.cw || null;
   }
 
   /**
@@ -80,7 +115,8 @@ export class SafetyRules {
       const along = dx * cw.roadDirX + dz * cw.roadDirZ;
       const across = -dx * cw.roadDirZ + dz * cw.roadDirX;
 
-      if (Math.abs(along) <= cw.depth * 0.65 && Math.abs(across) <= cw.width * 0.56) {
+      // Crosswalk zone = the asphalt part only, so standing on the yellow pad never counts as "crossing"
+      if (Math.abs(along) <= cw.depth * 0.65 && Math.abs(across) <= cw.width * 0.5 - 0.2) {
         return {
           zone: cw.isSignalized ? 'crosswalk_signalized' : 'crosswalk_unsignalized',
           crosswalk: cw,
@@ -332,7 +368,6 @@ export class SafetyRules {
               icon: '🌟',
               text: `+15 pts! Super safe! You looked BOTH left and right before crossing ${cw.roadName}!`,
             });
-            playerController.resetLookCheck();
           }
         }
       }
