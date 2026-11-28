@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet" />
+  <title>Westdale Safe Walk — Cootes Paradise Elementary</title>
+</head>
+
+<body>
+  <div id="canvas-container"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <!-- Top Left: Mission Banner -->
+    <div id="mission-card" class="hud-panel">
+      <div class="mission-badge">🎒 School Journey Mission</div>
+      <h1 id="mission-title">From Your House to Cootes Paradise Elementary</h1>
+      <div class="mission-meta">
+        <span id="distance-pill" class="pill pill-blue">📍 -- m to school</span>
+        <span id="zone-pill" class="pill pill-green">✅ Safe Sidewalk</span>
+      </div>
+    </div>
+
+    <!-- Top Center: 3 Safety Stars & Score Points -->
+    <div id="stars-panel" class="hud-panel">
+      <div class="stars-label">Safety Score</div>
+      <div id="stars-row" class="stars-row" aria-label="3 Safety Stars">
+        <span class="star active" data-star="1">★</span>
+        <span class="star active" data-star="2">★</span>
+        <span class="star active" data-star="3">★</span>
+      </div>
+      <div id="points-pill" class="points-pill">🏆 100 pts</div>
+      <div class="health-bar-wrap" aria-label="Health Points">
+        <div class="health-bar-track">
+          <div id="health-bar-fill" class="health-bar-fill"></div>
+        </div>
+        <span id="health-text" class="health-text">❤️ 100 / 100</span>
+      </div>
+      <div class="weapon-switcher" role="group" aria-label="Choose Rock or Stick">
+        <button id="btn-select-rock" class="weapon-btn active" type="button" title="Select Rock (Key 1)">🪨 10 Rocks</button>
+        <button id="btn-select-stick" class="weapon-btn" type="button" title="Select Stick (Key 2)">🪵 0 Sticks</button>
+      </div>
+      <div id="stick-mode-row" class="stick-mode-row hidden" role="group" aria-label="Stick Action">
+        <button id="btn-stick-wield" class="stick-mode-btn active" type="button" title="Wield Stick to Swing (Key B)">🏏 Wield</button>
+        <button id="btn-stick-throw" class="stick-mode-btn" type="button" title="Throw Stick (Key B)">🎯 Throw</button>
+      </div>
+      <div id="look-check-badge" class="look-badge hidden">👀 Looked Left &amp; Right!</div>
+    </div>
+
+    <!-- Top Right: Actions & Controls -->
+    <div id="actions-panel" class="hud-panel">
+      <button id="btn-route-hint" class="hud-btn" type="button">🗺️ Show Route Hint</button>
+      <button id="btn-camera-view" class="hud-btn hud-btn-view" type="button">👁️ 3rd Person View (V)</button>
+      <button id="btn-attack-mode" class="hud-btn hud-btn-attack" type="button">🎯 Attack Mode (C)</button>
+      <button id="btn-customize-avatar-hud" class="hud-btn hud-btn-avatar" type="button">🧑‍🎨 Customize Avatar</button>
+      <button id="btn-call-uber" class="hud-btn hud-btn-uber" type="button">🚗 Call an Uber (U)</button>
+      <button id="btn-restart-home" class="hud-btn hud-btn-restart" type="button">🔄 Restart / Change Home</button>
+      <button id="btn-tips-toggle" class="hud-btn hud-btn-secondary" type="button" title="Show or hide friendly tip pop-ups (safety warnings always show)">💬 Tips: On</button>
+      <button id="btn-pause" class="hud-btn hud-btn-secondary" type="button">⏸ Pause</button>
+      <div class="controls-mini">
+        <span><b>Mouse</b> Look &nbsp;•&nbsp; <b>ESC</b> Free Cursor</span>
+        <span><b>G</b> Enter/Exit &nbsp;•&nbsp; <b>F</b> Sit/Bed/Bus &nbsp;•&nbsp; <b>T</b> Talk</span>
+        <span><b>C</b> Attack &nbsp;•&nbsp; <b>1/2</b> Rock/Stick &nbsp;•&nbsp; <b>V</b> View</span>
+      </div>
+    </div>
+
+    <!-- Attack Mode Banner + Mobile Throw/Swing Button + Damage Flash -->
+    
+    <button id="btn-touch-throw" class="btn-touch-throw hidden" type="button">⚾ THROW!</button>
+    <div id="damage-flash" class="damage-flash hidden" aria-hidden="true"></div>
+
+    <!-- Realistic Interior Cabin Overlay when riding the School Bus or Police Car -->
+    <div id="vehicle-interior" class="vehicle-interior hidden" aria-hidden="true">
+      <div class="cabin-roof">
+        <div id="cabin-led-sign" class="cabin-led-sign">SCHOOL BUS • NEXT STOP: COOTES PARADISE</div>
+        <div class="cabin-mirror"></div>
+      </div>
+      <div class="cabin-pillar cabin-pillar-left"></div>
+      <div class="cabin-pillar cabin-pillar-right"></div>
+      <div class="cabin-dash">
+        <div class="dash-wheel">
+          <div class="dash-wheel-hub"></div>
+        </div>
+        <div class="dash-gauges">
+          <div class="gauge">
+            <div id="dash-speed-val" class="gauge-val">32</div>
+            <div class="gauge-lbl">KM/H</div>
+          </div>
+          <div id="dash-screen" class="dash-screen">🚌 WESTDALE ROUTE</div>
+        </div>
+        <div class="dash-right-handrail"></div>
+      </div>
+    </div>
+    <!-- Top-centre safety alert stack (below the score panel) -->
+    <div id="alert-stack" class="alert-stack">
+      <div id="sidewalk-warning" class="sidewalk-warning hidden" role="alert" aria-live="assertive">
+      <div class="sidewalk-warning-title">⚠️ Get Out of the Road Lane!</div>
+      <div id="sidewalk-warning-sub" class="sidewalk-warning-sub">
+        Return to the sidewalk or crosswalk! Game over in <strong id="sidewalk-countdown">5.0s</strong>
+      </div>
+      <div class="sidewalk-bar-track">
+        <div id="sidewalk-bar-fill" class="sidewalk-bar-fill"></div>
+      </div>
+    </div>
+      <div id="traffic-light-hud" class="traffic-light-hud hidden" role="status" aria-live="polite">
+      <div id="traffic-light-dot" class="traffic-light-dot"></div>
+      <div class="traffic-light-copy">
+        <div id="traffic-light-title" class="traffic-light-title">🔴 Light is RED — STOP!</div>
+        <div id="traffic-light-sub" class="traffic-light-sub">Wait for the GREEN Walk light!</div>
+      </div>
+    </div>
+      <div id="look-warning-hud" class="look-warning-hud hidden" role="alert" aria-live="polite">
+      <div id="look-warning-title" class="look-warning-title">🚸 You are now at the intersection!</div>
+      <div id="look-warning-sub" class="look-warning-sub">Look Left &amp; Right until both arrows fill up!</div>
+      <div id="look-arrows-row" class="look-arrows-row">
+        <div id="look-left-box" class="look-arrow-box">
+          <svg class="look-arrow-svg" viewBox="0 0 110 54" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <clipPath id="clip-arrow-left">
+                <rect id="clip-rect-left" x="110" y="0" width="0" height="54" />
+              </clipPath>
+            </defs>
+            <!-- Background empty left arrow -->
+            <polygon points="8,27 42,6 42,18 102,18 102,36 42,36 42,48" fill="rgba(255,255,255,0.22)" stroke="#ffffff"
+              stroke-width="3" stroke-linejoin="round" />
+            <!-- Progressive color-filled left arrow (fills right-to-left as you turn left!) -->
+            <polygon points="8,27 42,6 42,18 102,18 102,36 42,36 42,48" fill="#4ade80" stroke="#ffffff" stroke-width="3"
+              stroke-linejoin="round" clip-path="url(#clip-arrow-left)" />
+          </svg>
+          <div id="look-left-label" class="look-arrow-label">LEFT 0%</div>
+        </div>
+
+        <div id="look-right-box" class="look-arrow-box">
+          <svg class="look-arrow-svg" viewBox="0 0 110 54" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <clipPath id="clip-arrow-right">
+                <rect id="clip-rect-right" x="0" y="0" width="0" height="54" />
+              </clipPath>
+            </defs>
+            <!-- Background empty right arrow -->
+            <polygon points="102,27 68,6 68,18 8,18 8,36 68,36 68,48" fill="rgba(255,255,255,0.22)" stroke="#ffffff"
+              stroke-width="3" stroke-linejoin="round" />
+            <!-- Progressive color-filled right arrow (fills left-to-right as you turn right!) -->
+            <polygon points="102,27 68,6 68,18 8,18 8,36 68,36 68,48" fill="#4ade80" stroke="#ffffff" stroke-width="3"
+              stroke-linejoin="round" clip-path="url(#clip-arrow-right)" />
+          </svg>
+          <div id="look-right-label" class="look-arrow-label">RIGHT 0%</div>
+        </div>
+      </div>
+
+      <!-- Straight Forward Arrow shown once both Left & Right lookings are complete -->
+      <div id="look-forward-box" class="look-forward-box hidden">
+        <svg class="look-forward-svg" viewBox="0 0 64 76" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="32,4 58,34 42,34 42,72 22,72 22,34 6,34" fill="#4ade80" stroke="#ffffff" stroke-width="3.5"
+            stroke-linejoin="round" />
+        </svg>
+      </div>
+    </div>
+      <div id="uber-banner" class="uber-banner hidden" role="status" aria-live="polite">
+      <div class="uber-banner-title">🚗 Uber Ride — On the Way!</div>
+      <div id="uber-banner-sub" class="uber-banner-sub">
+        Sit back and enjoy the ride to your destination!
+      </div>
+    </div>
+    </div>
+
+    <!-- Bottom-center prompt dock: compact action chips that never stack on top of each other -->
+    <div id="prompt-dock" class="prompt-dock">
+      <button id="enter-building-prompt" class="enter-building-prompt hidden" type="button">
+      🚪 Press <kbd>G</kbd> or Walk In to Enter!
+    </button>
+      <button id="npc-prompt" class="npc-prompt hidden" type="button">
+      💬 Press <kbd>T</kbd> to Talk!
+    </button>
+      <button id="bus-prompt" class="bus-prompt hidden" type="button">
+      🚌 Press <kbd>F</kbd> to Board the School Bus!
+    </button>
+      <div id="attack-banner" class="attack-banner hidden">
+      🎯 <strong>ATTACK MODE!</strong> <kbd>1</kbd> Rock • <kbd>2</kbd> Stick (<kbd>B</kbd> Wield/Throw) • Click / <kbd>Space</kbd> to attack!
+    </div>
+    </div>
+
+    <!-- Bottom-left message feed: tips/feedback + NPC conversations, out of the line of sight -->
+    <div id="message-feed" class="message-feed">
+      <div id="npc-dialog" class="npc-dialog hidden" role="status" aria-live="polite">
+      <div class="npc-dialog-header">
+        <div class="npc-dialog-title-wrap">
+          <span id="npc-dialog-name">🦺 Crossing Guard Sam</span>
+          <span id="npc-dialog-role" class="npc-role-pill">Crossing Guard</span>
+        </div>
+        <button id="btn-close-npc-dialog" class="npc-close-btn" type="button" aria-label="Close conversation">✕</button>
+      </div>
+      <p id="npc-dialog-text" class="npc-dialog-text"></p>
+      <div class="npc-dialog-hint">Press <kbd>T</kbd> for more &nbsp;•&nbsp; <kbd>X</kbd> or click ✕ to close</div>
+    </div>
+      <div id="feedback-banner" class="feedback-banner hidden" role="status" aria-live="polite">
+      <span id="feedback-icon">🌟</span>
+      <span id="feedback-text">Great job staying on the sidewalk!</span>
+    </div>
+    </div>
+
+    <!-- Center Crosshair (subtle) -->
+    <div id="crosshair" aria-hidden="true"></div>
+
+    <!-- Bottom Right: Synchronized 2D Leaflet Mini-Map (Expandable!) -->
+    <div id="minimap-wrapper" class="hud-panel">
+      <div class="minimap-header">
+        <span id="minimap-title">🗺️ Map</span>
+        <div class="minimap-header-actions">
+          <span id="compass-readout" class="compass-pill">N 0°</span>
+          <button id="btn-fit-route" class="map-ctrl-btn hidden" type="button" title="Fit Full Route">🎯 Fit
+            Route</button>
+          <button id="btn-expand-map" class="map-ctrl-btn" type="button" title="Expand / Collapse Map (M)">⤢</button>
+        </div>
+      </div>
+      <div id="minimap"></div>
+      <div id="minimap-legend" class="minimap-legend hidden">
+        <span>🏠 Origin</span>
+        <span>🎯 Destination</span>
+        <span>🔵 You</span>
+        <span>🚌 Bus</span>
+        <span>Scroll / Pinch to Zoom • Drag to Pan</span>
+      </div>
+    </div>
+
+    <!-- Touch Controls for iPad & iPhone (shown automatically on touch devices) -->
+    <div id="touch-controls" class="touch-controls hidden" aria-label="Touch Controls">
+      <div class="touch-look-row">
+        <button id="btn-touch-look-left" class="touch-look-btn" type="button">⬅️ Look L</button>
+        <button id="btn-touch-look-right" class="touch-look-btn" type="button">Look R ➡️</button>
+      </div>
+      <div id="touch-joystick" class="touch-joystick">
+        <div id="touch-joystick-knob" class="touch-joystick-knob"></div>
+      </div>
+      <div class="touch-drag-hint">Drag screen to look around</div>
+    </div>
+  </div>
+
+  <!-- Start / Pause Overlay -->
+  <div id="overlay-start" class="overlay">
+    <div class="modal-card">
+      <div class="modal-emoji">🚸🏫</div>
+      <h2 id="overlay-title">Westdale Safe Walk</h2>
+      <p class="modal-subtitle">
+        Choose <strong>Your Home</strong> and <strong>Your School / Destination</strong> anywhere on the map, then walk
+        or ride safely!
+      </p>
+
+      <!-- Home Address Picker (Anywhere on the Map) -->
+      <div class="address-picker">
+        <label class="address-label" for="home-address-input">🏠 Starting Home Address</label>
+        <div class="address-row">
+          <input id="home-address-input" class="address-input" type="text"
+            placeholder="Enter any starting address (e.g. 955 King St W, Hamilton...)" autocomplete="off" />
+          <button id="btn-search-address" class="address-search-btn" type="button">Search</button>
+        </div>
+        <div id="address-results" class="address-results hidden"></div>
+        <div class="quick-picks">
+          <button class="chip-btn active" type="button" data-preset="marion">🏠 Marion Ave (Westdale)</button>
+          <button class="chip-btn" type="button" data-lat="43.2626" data-lon="-79.9041"
+            data-label="Westdale Library (955 King St W)">📚 Westdale Library</button>
+          <button class="chip-btn" type="button" data-lat="43.2572" data-lon="-79.8861"
+            data-label="Locke St S, Hamilton">🛍️ Locke St S</button>
+          <button class="chip-btn" type="button" data-lat="43.2666" data-lon="-79.9565"
+            data-label="Downtown Dundas, Hamilton">🌳 Dundas</button>
+        </div>
+        <div id="selected-home-label" class="selected-home-label">
+          Selected Home: <strong>Marion Ave N, Westdale</strong>
+        </div>
+      </div>
+
+      <!-- Destination Picker (School or Any Place on the Map) -->
+      <div class="address-picker">
+        <label class="address-label" for="dest-address-input">🎯 Destination (School or Any Place)</label>
+        <div class="address-row">
+          <input id="dest-address-input" class="address-input" type="text"
+            placeholder="Enter any school, park, shop, or address..." autocomplete="off" />
+          <button id="btn-search-dest" class="address-search-btn" type="button">Search</button>
+        </div>
+        <div id="dest-results" class="address-results hidden"></div>
+        <div class="quick-picks">
+          <button class="chip-btn dest-chip-btn active" type="button" data-dest-preset="cootes">🏫 Cootes Paradise
+            School</button>
+          <button class="chip-btn dest-chip-btn" type="button" data-lat="43.2626" data-lon="-79.9041"
+            data-label="Westdale Library">📚 Westdale Library</button>
+          <button class="chip-btn dest-chip-btn" type="button" data-lat="43.2609" data-lon="-79.9192"
+            data-label="McMaster University">🎓 McMaster Univ.</button>
+          <button class="chip-btn dest-chip-btn" type="button" data-lat="43.2572" data-lon="-79.8861"
+            data-label="Locke St S, Hamilton">🛍️ Locke St S</button>
+        </div>
+        <div id="selected-dest-label" class="selected-home-label">
+          Selected Destination: <strong>Cootes Paradise Elementary School</strong>
+        </div>
+      </div>
+
+      <div class="rules-grid">
+        <div class="rule-item">
+          <div class="rule-icon">🚶</div>
+          <div>
+            <strong>Use Sidewalks &amp; Crosswalks</strong>
+            <p>Stay off the road lanes and cross only on white zebra stripes.</p>
+          </div>
+        </div>
+        <div class="rule-item">
+          <div class="rule-icon">🚦</div>
+          <div>
+            <strong>Obey Walk Signals</strong>
+            <p>Cross King St W only when the white Walk person is lit — stop for the red hand!</p>
+          </div>
+        </div>
+        <div class="rule-item">
+          <div class="rule-icon">👀</div>
+          <div>
+            <strong>Look Left &amp; Right</strong>
+            <p>Turn your head both ways before stepping into unsignalized side-street crosswalks.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls-help">
+        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd>
+          Walk</span>
+        <span><kbd>Mouse</kbd> or <kbd>Q</kbd>/<kbd>E</kbd> Look Around</span>
+        <span><kbd>ESC</kbd> Pause</span>
+      </div>
+
+      <div class="modal-actions-row">
+        <button id="btn-start" class="primary-btn" type="button">Start Walking!</button>
+        <button id="btn-customize-avatar" class="hud-btn modal-alt-btn hud-btn-avatar" type="button">🧑‍🎨 Customize
+          Avatar</button>
+      </div>
+      <div id="loading-status" class="loading-status">Loading Westdale neighborhood...</div>
+    </div>
+  </div>
+
+  <!-- Victory Overlay -->
+  <div id="overlay-victory" class="overlay hidden">
+    <div class="modal-card victory-card">
+      <div class="modal-emoji">🎉🎯🌟</div>
+      <h2 id="victory-heading">Arrived Safely!</h2>
+      <p id="victory-subtitle" class="modal-subtitle">
+        Welcome to <strong>Cootes Paradise Elementary School</strong>!
+      </p>
+      <div id="victory-stars" class="victory-stars">★★★</div>
+      <p id="victory-message" class="victory-message">
+        Amazing job! You earned all 3 Safety Stars!
+      </p>
+      <div id="victory-stats" class="victory-stats"></div>
+      <div class="modal-actions-row">
+        <button id="btn-play-again" class="primary-btn" type="button">Walk Again</button>
+        <button id="btn-victory-change-home" class="hud-btn modal-alt-btn" type="button">🏠 Change Home</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Over Overlay -->
+  <div id="overlay-gameover" class="overlay hidden">
+    <div class="modal-card gameover-card">
+      <div class="modal-emoji">🛑🚶</div>
+      <h2>Game Over!</h2>
+      <p id="gameover-reason" class="modal-subtitle">
+        You stayed off the sidewalk for more than 5 seconds. Always walk on the sidewalk and cross only at white zebra
+        crosswalks!
+      </p>
+      <div class="modal-actions-row">
+        <button id="btn-try-again" class="primary-btn gameover-btn" type="button">Try Again</button>
+        <button id="btn-gameover-change-home" class="hud-btn modal-alt-btn" type="button">🏠 Change Home</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Public Building Interior View Overlay -->
+  <div id="overlay-interior" class="overlay interior-overlay hidden">
+    <div id="interior-card" class="interior-card">
+      <div id="interior-scene" class="interior-scene"></div>
+      <div class="interior-body">
+        <div class="interior-header">
+          <div>
+            <div id="interior-badge" class="interior-badge">🍽️ Restaurant</div>
+            <h2 id="interior-title">Dragon Court</h2>
+            <div id="interior-address" class="interior-address">#988 King Street West</div>
+          </div>
+        </div>
+        <p id="interior-greeting" class="interior-greeting">
+          Welcome inside! Take a look around!
+        </p>
+        <div id="interior-response" class="interior-response hidden"></div>
+        <div class="interior-actions">
+          <button id="btn-interior-interact" class="hud-btn interior-fun-btn" type="button">
+            ✨ Look Around
+          </button>
+          <button id="btn-exit-building" class="primary-btn" type="button">
+            🚪 Walk Back Outside
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Avatar Customizer Overlay (Live Rotating 3D Preview) -->
+  <!-- Avatar Customizer Overlay (Live Rotating 3D Preview) -->
+  <div id="overlay-avatar" class="overlay hidden">
+    <div class="modal-card avatar-modal-card">
+      <h2>🧑‍🎨 Make Your Walker</h2>
+      <div class="avatar-customizer-grid">
+        <div class="avatar-preview-box">
+          <canvas id="avatar-preview-canvas" width="240" height="300"></canvas>
+          <div id="avatar-preview-name" class="avatar-preview-name">Hoodie &amp; Shorts</div>
+          <button id="btn-avatar-random" class="hud-btn hud-btn-secondary avatar-random-btn" type="button">🎲 Surprise Me</button>
+        </div>
+
+        <div class="avatar-options">
+          <div class="avatar-tabs" role="tablist">
+            <button type="button" class="avatar-tab active" data-tab="character" role="tab">🧍 Character</button>
+            <button type="button" class="avatar-tab" data-tab="colors" role="tab">🎨 Colours</button>
+            <button type="button" class="avatar-tab" data-tab="gear" role="tab">🎒 Gear</button>
+          </div>
+
+          <div class="avatar-panel" data-panel="character">
+            <div id="avatar-character-grid" class="avatar-character-grid" data-avatar-key="character"></div>
+          </div>
+
+          <div class="avatar-panel hidden" data-panel="colors">
+            <p id="avatar-fixed-note" class="avatar-fixed-note hidden">🎧 This character's outfit has fixed colours — try a backpack or glasses in Gear!</p>
+          <div class="avatar-group" data-slot="skin">
+            <div class="avatar-group-label">Skin Tone</div>
+            <div class="avatar-swatch-row" data-avatar-key="skinColor"><button type="button" class="av-swatch" data-val="#ffe0bd" style="background:#ffe0bd" title="Fair"></button><button type="button" class="av-swatch" data-val="#f1c27d" style="background:#f1c27d" title="Peach"></button><button type="button" class="av-swatch" data-val="#e0ac69" style="background:#e0ac69" title="Golden"></button><button type="button" class="av-swatch" data-val="#c68642" style="background:#c68642" title="Tan"></button><button type="button" class="av-swatch" data-val="#8d5524" style="background:#8d5524" title="Brown"></button><button type="button" class="av-swatch" data-val="#5c3a1e" style="background:#5c3a1e" title="Deep"></button></div>
+          </div>
+          <div class="avatar-group" data-slot="hair">
+            <div class="avatar-group-label">Hair</div>
+            <div class="avatar-swatch-row" data-avatar-key="hairColor"><button type="button" class="av-swatch" data-val="#1b1b1b" style="background:#1b1b1b" title="Black"></button><button type="button" class="av-swatch" data-val="#4a2f1b" style="background:#4a2f1b" title="Brown"></button><button type="button" class="av-swatch" data-val="#8a4b22" style="background:#8a4b22" title="Auburn"></button><button type="button" class="av-swatch" data-val="#d8b25a" style="background:#d8b25a" title="Blonde"></button><button type="button" class="av-swatch" data-val="#c0392b" style="background:#c0392b" title="Red"></button><button type="button" class="av-swatch" data-val="#e8e4dc" style="background:#e8e4dc" title="Silver"></button><button type="button" class="av-swatch" data-val="#3b6fd8" style="background:#3b6fd8" title="Blue"></button><button type="button" class="av-swatch" data-val="#e85fa8" style="background:#e85fa8" title="Pink"></button></div>
+          </div>
+          <div class="avatar-group" data-slot="top">
+            <div class="avatar-group-label">Top / Jacket</div>
+            <div class="avatar-swatch-row" data-avatar-key="topColor"><button type="button" class="av-swatch" data-val="#ef4444" style="background:#ef4444" title="Red"></button><button type="button" class="av-swatch" data-val="#f97316" style="background:#f97316" title="Orange"></button><button type="button" class="av-swatch" data-val="#facc15" style="background:#facc15" title="Yellow"></button><button type="button" class="av-swatch" data-val="#22c55e" style="background:#22c55e" title="Green"></button><button type="button" class="av-swatch" data-val="#0ea5e9" style="background:#0ea5e9" title="Sky"></button><button type="button" class="av-swatch" data-val="#6366f1" style="background:#6366f1" title="Indigo"></button><button type="button" class="av-swatch" data-val="#a855f7" style="background:#a855f7" title="Purple"></button><button type="button" class="av-swatch" data-val="#ec4899" style="background:#ec4899" title="Pink"></button><button type="button" class="av-swatch" data-val="#f8fafc" style="background:#f8fafc" title="White"></button><button type="button" class="av-swatch" data-val="#1f2937" style="background:#1f2937" title="Charcoal"></button></div>
+          </div>
+          <div class="avatar-group" data-slot="pants">
+            <div class="avatar-group-label">Pants / Shorts</div>
+            <div class="avatar-swatch-row" data-avatar-key="pantsColor"><button type="button" class="av-swatch" data-val="#1e3a8a" style="background:#1e3a8a" title="Navy"></button><button type="button" class="av-swatch" data-val="#3b82f6" style="background:#3b82f6" title="Denim"></button><button type="button" class="av-swatch" data-val="#334155" style="background:#334155" title="Slate"></button><button type="button" class="av-swatch" data-val="#0f172a" style="background:#0f172a" title="Black"></button><button type="button" class="av-swatch" data-val="#a16207" style="background:#a16207" title="Khaki"></button><button type="button" class="av-swatch" data-val="#0f766e" style="background:#0f766e" title="Teal"></button><button type="button" class="av-swatch" data-val="#7c2d12" style="background:#7c2d12" title="Rust"></button><button type="button" class="av-swatch" data-val="#e7e5e4" style="background:#e7e5e4" title="Stone"></button></div>
+          </div>
+          <div class="avatar-group" data-slot="shoes">
+            <div class="avatar-group-label">Shoes</div>
+            <div class="avatar-swatch-row" data-avatar-key="shoeColor"><button type="button" class="av-swatch" data-val="#f8fafc" style="background:#f8fafc" title="White"></button><button type="button" class="av-swatch" data-val="#111827" style="background:#111827" title="Black"></button><button type="button" class="av-swatch" data-val="#ef4444" style="background:#ef4444" title="Red"></button><button type="button" class="av-swatch" data-val="#2563eb" style="background:#2563eb" title="Blue"></button><button type="button" class="av-swatch" data-val="#22c55e" style="background:#22c55e" title="Green"></button><button type="button" class="av-swatch" data-val="#f59e0b" style="background:#f59e0b" title="Orange"></button><button type="button" class="av-swatch" data-val="#ec4899" style="background:#ec4899" title="Pink"></button></div>
+          </div>
+          </div>
+
+          <div class="avatar-panel hidden" data-panel="gear">
+          <div class="avatar-group">
+            <div class="avatar-group-label">School Backpack</div>
+            <div class="avatar-swatch-row" data-avatar-key="backpackColor"><button type="button" class="av-swatch av-none" data-val="none" title="None">✕</button><button type="button" class="av-swatch" data-val="#facc15" style="background:#facc15" title="Yellow"></button><button type="button" class="av-swatch" data-val="#ef4444" style="background:#ef4444" title="Red"></button><button type="button" class="av-swatch" data-val="#38bdf8" style="background:#38bdf8" title="Blue"></button><button type="button" class="av-swatch" data-val="#22c55e" style="background:#22c55e" title="Green"></button><button type="button" class="av-swatch" data-val="#a855f7" style="background:#a855f7" title="Purple"></button><button type="button" class="av-swatch" data-val="#ec4899" style="background:#ec4899" title="Pink"></button><button type="button" class="av-swatch" data-val="#1f2937" style="background:#1f2937" title="Black"></button></div>
+          </div>
+          <div class="avatar-group" data-slot="hat">
+            <div class="avatar-group-label">Hat <span id="avatar-hat-note" class="avatar-group-note hidden">(this outfit already has one)</span></div>
+            <div class="avatar-chip-row" data-avatar-key="hat">
+              <button type="button" class="av-chip" data-val="none">No Hat</button>
+              <button type="button" class="av-chip" data-val="cap">🧢 Cap</button>
+              <button type="button" class="av-chip" data-val="beanie">🧶 Beanie</button>
+            </div>
+            <div class="avatar-swatch-row" data-avatar-key="hatColor"><button type="button" class="av-swatch" data-val="#2563eb" style="background:#2563eb" title="Blue"></button><button type="button" class="av-swatch" data-val="#ef4444" style="background:#ef4444" title="Red"></button><button type="button" class="av-swatch" data-val="#22c55e" style="background:#22c55e" title="Green"></button><button type="button" class="av-swatch" data-val="#facc15" style="background:#facc15" title="Yellow"></button><button type="button" class="av-swatch" data-val="#a855f7" style="background:#a855f7" title="Purple"></button><button type="button" class="av-swatch" data-val="#1f2937" style="background:#1f2937" title="Black"></button><button type="button" class="av-swatch" data-val="#f8fafc" style="background:#f8fafc" title="White"></button></div>
+          </div>
+          <div class="avatar-group">
+            <div class="avatar-group-label">Glasses</div>
+            <div class="avatar-chip-row" data-avatar-key="glasses">
+              <button type="button" class="av-chip" data-val="none">None</button>
+              <button type="button" class="av-chip" data-val="round">👓 Round</button>
+              <button type="button" class="av-chip" data-val="shades">🕶️ Shades</button>
+            </div>
+          </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions-row">
+        <button id="btn-avatar-done" class="primary-btn" type="button">✅ Save &amp; Wear (3rd Person)</button>
+        <button id="btn-avatar-close" class="hud-btn hud-btn-secondary modal-alt-btn" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Call an Uber Destination Picker Overlay -->
+  <div id="overlay-uber" class="overlay hidden">
+    <div class="modal-card uber-modal-card">
+      <div class="modal-emoji">🚗📍</div>
+      <h2>Call an Uber</h2>
+      <p class="modal-subtitle">
+        Where would you like to go? Enter any address or pick a quick destination below!
+      </p>
+
+      <div class="address-picker">
+        <label class="address-label" for="uber-dest-input">📍 Enter Destination Address</label>
+        <div class="address-row">
+          <input id="uber-dest-input" class="address-input" type="text"
+            placeholder="e.g. 900 King St W, Locke St S, CN Tower..." autocomplete="off" />
+          <button id="btn-search-uber" class="address-search-btn" type="button">Search</button>
+        </div>
+        <div id="uber-results" class="address-results hidden"></div>
+        <div class="quick-picks">
+          <button class="chip-btn uber-quick-btn" type="button" data-uber-preset="home">🏠 Your House</button>
+          <button class="chip-btn uber-quick-btn" type="button" data-uber-preset="school">🏫 Cootes Paradise
+            School</button>
+          <button class="chip-btn uber-quick-btn" type="button" data-lat="43.2626" data-lon="-79.9041"
+            data-label="Westdale Library">📚 Westdale Library</button>
+          <button class="chip-btn uber-quick-btn" type="button" data-lat="43.2572" data-lon="-79.8861"
+            data-label="Locke St S, Hamilton">🛍️ Locke St S</button>
+        </div>
+        <div id="uber-status" class="selected-home-label">Pick a destination to summon your Uber!</div>
+      </div>
+
+      <div class="modal-actions-row">
+        <button id="btn-uber-cancel" class="hud-btn hud-btn-secondary modal-alt-btn" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hospital Treatment Overlay (after Ambulance Rescue!) -->
+  <div id="overlay-hospital" class="overlay hidden">
+    <div class="modal-card hospital-card">
+      <div class="modal-emoji">🏥🚑❤️</div>
+      <h2>Hamilton Children’s Hospital</h2>
+      <p id="hospital-status" class="modal-subtitle">
+        The ambulance brought you safely to the hospital! Doctors are patching up your scrapes...
+      </p>
+      <div class="hospital-bar-track">
+        <div id="hospital-bar-fill" class="hospital-bar-fill"></div>
+      </div>
+      <button id="btn-leave-hospital" class="primary-btn hidden" type="button">
+        ❤️ All Healed (100 HP) — Continue Walking!
+      </button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

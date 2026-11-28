@@ -9,9 +9,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "fetch-preset": "node scripts/fetch-preset.mjs"
+    "fetch-preset": "node scripts/fetch-preset.mjs",
+    "optimize-metahuman": "npx --yes @gltf-transform/cli@4 optimize --compress meshopt --texture-compress webp --texture-size 1024 --simplify false"
   },
   "dependencies": {
+    "@pixiv/three-vrm": "^3.6.0",
     "leaflet": "^1.9.4",
     "three": "^0.170.0"
   },

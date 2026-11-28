@@ -9,10 +9,20 @@
  */
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { closestPointOnSegment2D, pointInPolygon2D } from '../geo.js';
+import { createStylizedHumanMesh } from './characterBuilder.js';
+import { createRealisticHumanInstance, addAvatarAccessories } from './humanModels.js';
+import { buildParking } from './parkingBuilder.js';
+import { buildHouseRoof } from './roofBuilder.js';
+import { buildVegetation } from './vegetationBuilder.js';
+import { getAreaGrassTexture, getPitchTexture } from '../visuals.js';
 
-const HOUSE_COLORS = [0xfef3c7, 0xffedd5, 0xe0f2fe, 0xfce7f3, 0xe2e8f0, 0xfde68a, 0xdcfce7];
-const SHOP_COLORS = [0xfb7185, 0x38bdf8, 0xfbbf24, 0x34d399, 0xa78bfa, 0xf97316];
+// Painted siding colours (realistic: cream, sage, slate blue, warm grey, white, butter)
+const HOUSE_COLORS = [0xf1e8d4, 0xc9d4bd, 0xb9c8d6, 0xd9d3c7, 0xf5f3ee, 0xeadcb0, 0xd7c2b0];
+const BRICK_STYLES = ['brick-red', 'brick-brown', 'brick-buff'];
+// Muted painted-stucco storefront colours (used for ~1 in 5 shops; the rest are brick)
+const SHOP_COLORS = [0xd9c7a7, 0xb7c4b4, 0xc9b6a6, 0xe2d6bf, 0xa9b6c2, 0xd8c3a0];
 
 function makeSignTexture(lines, bgColor = '#1e3a8a', textColor = '#ffffff', borderColor = '#ffffff', width = 512, height = 160) {
   const canvas = document.createElement('canvas');
@@ -440,6 +450,291 @@ function createStreetSignPost(inter, mats) {
   return group;
 }
 
+function makeBuildingFacadeTexture(style = 'house') {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+
+  // Bright neutral wall base so material.color tints each building naturally
+  ctx.fillStyle = style === 'civic' ? '#ece7df' : '#f4f4f1';
+  ctx.fillRect(0, 0, 256, 256);
+
+  const isShopBrick = style.startsWith('shop-');
+  const brickKey = isShopBrick ? style.slice(5) : style;
+  const brick = {
+    'brick-red': { mortar: '#cdbfae', tones: [[150, 62, 44], [166, 72, 50], [138, 56, 40], [172, 84, 60]] },
+    'brick-brown': { mortar: '#c8b9a6', tones: [[112, 70, 48], [128, 82, 56], [100, 62, 44], [140, 94, 66]] },
+    'brick-buff': { mortar: '#e2d8c6', tones: [[206, 178, 128], [196, 164, 112], [214, 188, 140], [188, 156, 106]] },
+  }[brickKey];
+
+  if (brick) {
+    // Real coloured brick courses with mortar and per-brick tone variation (untinted material)
+    ctx.fillStyle = brick.mortar;
+    ctx.fillRect(0, 0, 256, 256);
+    let sd = 11;
+    const rnd = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+    for (let row = 0; row < 32; row++) {
+      const y = row * 8;
+      const off = (row % 2) * 12;
+      for (let x = -off; x < 256; x += 24) {
+        const t = brick.tones[Math.floor(rnd() * brick.tones.length)];
+        const j = (rnd() - 0.5) * 18;
+        ctx.fillStyle = `rgb(${t[0] + j},${t[1] + j * 0.6},${t[2] + j * 0.5})`;
+        ctx.fillRect(x + 1, y + 1, 22, 6);
+      }
+    }
+  } else if (style === 'house') {
+    // Subtle horizontal clapboard / siding lines
+    ctx.strokeStyle = 'rgba(30, 41, 59, 0.09)';
+    ctx.lineWidth = 2;
+    for (let y = 8; y < 256; y += 16) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(256, y);
+      ctx.stroke();
+    }
+  } else {
+    // Subtle brick / masonry courses for shops & civic buildings
+    ctx.strokeStyle = 'rgba(30, 41, 59, 0.11)';
+    ctx.lineWidth = 1.5;
+    for (let row = 0; row < 16; row++) {
+      const y = row * 16;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(256, y);
+      ctx.stroke();
+      const offset = (row % 2) * 24;
+      for (let x = offset; x < 256; x += 48) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y + 16);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Subtle floor cornice trim band at top of each story
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.14)';
+  ctx.fillRect(0, 0, 256, 12);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.fillRect(0, 12, 256, 5);
+
+  const drawWindow = (wx, wy, ww, wh, warmGlow = false) => {
+    // Exterior trim / frame
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(wx - 7, wy - 7, ww + 14, wh + 14);
+    ctx.strokeStyle = 'rgba(30, 41, 59, 0.32)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(wx - 7, wy - 7, ww + 14, wh + 14);
+
+    // Glass pane gradient (sky reflection or cozy warm indoor light)
+    // Glass: sky reflection at the top fading into a darker interior; some rooms show curtains/warm lamp
+    const grad = ctx.createLinearGradient(wx, wy, wx + ww * 0.3, wy + wh);
+    grad.addColorStop(0, '#a9c9e4');
+    grad.addColorStop(0.35, '#5f86a8');
+    grad.addColorStop(1, warmGlow ? '#3a3a3f' : '#2c3a4a');
+    ctx.fillStyle = grad;
+    ctx.fillRect(wx, wy, ww, wh);
+    if (warmGlow) {
+      // soft lamp glow + side curtains
+      const g2 = ctx.createRadialGradient(wx + ww * 0.5, wy + wh * 0.8, 2, wx + ww * 0.5, wy + wh * 0.8, wh * 0.55);
+      g2.addColorStop(0, 'rgba(255, 214, 150, 0.55)');
+      g2.addColorStop(1, 'rgba(255, 214, 150, 0)');
+      ctx.fillStyle = g2;
+      ctx.fillRect(wx, wy, ww, wh);
+      ctx.fillStyle = 'rgba(236, 226, 205, 0.85)';
+      ctx.fillRect(wx, wy, ww * 0.18, wh);
+      ctx.fillRect(wx + ww * 0.82, wy, ww * 0.18, wh);
+    }
+
+    // Diagonal sky shine reflection
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+    ctx.beginPath();
+    ctx.moveTo(wx + 6, wy);
+    ctx.lineTo(wx + ww * 0.45, wy);
+    ctx.lineTo(wx, wy + wh * 0.45);
+    ctx.lineTo(wx, wy + 6);
+    ctx.closePath();
+    ctx.fill();
+
+    // Window muntins (crossbar panes)
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(wx + ww / 2 - 2.5, wy, 5, wh);
+    ctx.fillRect(wx, wy + wh * 0.48 - 2.5, ww, 5);
+
+    // Projecting stone/wood window sill at bottom
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(wx - 11, wy + wh + 5, ww + 22, 9);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.22)';
+    ctx.fillRect(wx - 11, wy + wh + 14, ww + 22, 5);
+  };
+
+  if (isShopBrick) {
+    drawWindow(28, 46, 86, 136, true);
+    drawWindow(142, 46, 86, 136, false);
+  } else if (style === 'house' || brick) {
+    drawWindow(36, 54, 68, 118, false);
+    drawWindow(152, 54, 68, 118, true);
+  } else if (style === 'shop') {
+    drawWindow(28, 46, 86, 136, true);
+    drawWindow(142, 46, 86, 136, false);
+  } else {
+    // Civic / School / Library: tall rhythmic classroom windows
+    drawWindow(24, 42, 56, 146, false);
+    drawWindow(100, 42, 56, 146, true);
+    drawWindow(176, 42, 56, 146, false);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(1 / 4.2, 1 / 3.3);
+  tex.anisotropy = 4;
+  return tex;
+}
+
+/** Bakes a group's meshes into world-space geometry and merges them per material. */
+function mergeByMaterial(src) {
+  src.updateMatrixWorld(true);
+  const buckets = new Map();
+  src.traverse((o) => {
+    if (!o.isMesh) return;
+    let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    g.applyMatrix4(o.matrixWorld);
+    for (const name of Object.keys(g.attributes)) {
+      if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+    }
+    if (!g.attributes.uv) {
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    }
+    if (!g.attributes.normal) g.computeVertexNormals();
+    if (!buckets.has(o.material)) buckets.set(o.material, []);
+    buckets.get(o.material).push(g);
+  });
+  const out = new THREE.Group();
+  out.name = 'mergedRoofs';
+  for (const [mat, geos] of buckets) {
+    const merged = mergeGeometries(geos, false);
+    geos.forEach((g) => g.dispose());
+    const m = new THREE.Mesh(merged, mat);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    out.add(m);
+  }
+  src.traverse((o) => o.isMesh && o.geometry.dispose());
+  return out;
+}
+
+const brickFacadeCache = new Map();
+function getBrickFacade(style) {
+  if (!brickFacadeCache.has(style)) brickFacadeCache.set(style, makeBuildingFacadeTexture(style));
+  return brickFacadeCache.get(style);
+}
+
+function getBuildingDoorAnchor(b) {
+  if (b.frontPt) {
+    return { x: b.frontPt.x, z: b.frontPt.z, angle: b.frontAngle || 0 };
+  }
+  const poly = b.polygon;
+  if (!poly || poly.length < 3 || !b.centroid) return null;
+
+  let bestEdge = null;
+  let bestLen = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const c = poly[(i + 1) % poly.length];
+    const len = Math.hypot(c.x - a.x, c.z - a.z);
+    if (len > bestLen) {
+      bestLen = len;
+      bestEdge = { a, c, len };
+    }
+  }
+  if (!bestEdge || bestLen < 3.2) return null;
+
+  const mx = (bestEdge.a.x + bestEdge.c.x) * 0.5;
+  const mz = (bestEdge.a.z + bestEdge.c.z) * 0.5;
+  const dx = bestEdge.c.x - bestEdge.a.x;
+  const dz = bestEdge.c.z - bestEdge.a.z;
+  let nx = -dz / bestEdge.len;
+  let nz = dx / bestEdge.len;
+  // Ensure normal points outward away from building centroid
+  if (nx * (mx - b.centroid.x) + nz * (mz - b.centroid.z) < 0) {
+    nx = -nx;
+    nz = -nz;
+  }
+  return {
+    x: mx + nx * 0.08,
+    z: mz + nz * 0.08,
+    angle: Math.atan2(nx, nz),
+  };
+}
+
+const HOUSE_DOOR_COLORS = [0x991b1b, 0x1e3a8a, 0x14532d, 0x78350f, 0x334155, 0x0f766e];
+
+function createHouseDoor(anchor, seed = 0) {
+  const g = new THREE.Group();
+  g.position.set(anchor.x, 0, anchor.z);
+  g.rotation.y = anchor.angle || 0;
+
+  // White exterior door trim frame
+  const frame = new THREE.Mesh(
+    new THREE.BoxGeometry(1.22, 2.24, 0.14),
+    new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.65 })
+  );
+  frame.position.set(0, 1.16, 0.04);
+  g.add(frame);
+
+  // Colored wood panel door
+  const doorColor = HOUSE_DOOR_COLORS[Math.abs(seed) % HOUSE_DOOR_COLORS.length];
+  const door = new THREE.Mesh(
+    new THREE.BoxGeometry(0.98, 2.08, 0.16),
+    new THREE.MeshStandardMaterial({ color: doorColor, roughness: 0.6 })
+  );
+  door.position.set(0, 1.12, 0.06);
+  g.add(door);
+
+  // Upper glass windowpane on the door
+  const pane = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.56, 0.54),
+    new THREE.MeshStandardMaterial({
+      color: 0xbae6fd,
+      emissive: 0xfef08a,
+      emissiveIntensity: 0.25,
+      roughness: 0.2,
+    })
+  );
+  pane.position.set(0, 1.66, 0.145);
+  g.add(pane);
+
+  // Brass doorknob
+  const knob = new THREE.Mesh(
+    new THREE.SphereGeometry(0.045, 7, 7),
+    new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.6, roughness: 0.3 })
+  );
+  knob.position.set(0.35, 1.05, 0.16);
+  g.add(knob);
+
+  // Concrete front stoop / step
+  const stoop = new THREE.Mesh(
+    new THREE.BoxGeometry(1.5, 0.18, 0.72),
+    new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.88 })
+  );
+  stoop.position.set(0, 0.09, 0.36);
+  g.add(stoop);
+
+  // Warm porch lantern above door
+  const lamp = new THREE.Mesh(
+    new THREE.BoxGeometry(0.16, 0.22, 0.14),
+    new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xf59e0b, emissiveIntensity: 0.45 })
+  );
+  lamp.position.set(0.74, 2.05, 0.1);
+  g.add(lamp);
+
+  return g;
+}
+
 function createHouseNumberPlaque(houseNumber, frontPt, frontAngle) {
   const canvas = document.createElement('canvas');
   canvas.width = 160;
@@ -470,25 +765,85 @@ function createPublicEntrance(b, mats) {
   g.position.set(b.frontPt.x, 0, b.frontPt.z);
   g.rotation.y = b.frontAngle || 0;
 
-  // Welcoming glass doorway + bright welcome mat on the ground
+  // Storefront color & label metadata
+  const typeMeta = {
+    restaurant: { emoji: '🍽️', bg: '#b91c1c', awning: 0xdc2626 },
+    cafe: { emoji: '☕', bg: '#92400e', awning: 0xb45309 },
+    grocery: { emoji: '🛒', bg: '#15803d', awning: 0x16a34a },
+    library: { emoji: '📚', bg: '#0369a1', awning: 0x0284c7 },
+    school: { emoji: '🏫', bg: '#b91c1c', awning: 0xdc2626 },
+    church: { emoji: '⛪', bg: '#4338ca', awning: 0x4338ca },
+    pharmacy: { emoji: '💊', bg: '#0f766e', awning: 0x0d9488 },
+    bank: { emoji: '🏦', bg: '#1d4ed8', awning: 0x2563eb },
+    shop: { emoji: '🛍️', bg: '#7c3aed', awning: 0x7c3aed },
+  }[b.placeType] || { emoji: '🏬', bg: '#0f766e', awning: 0x0f766e };
+
+  // Welcoming double glass doorway + chrome handles
   const doorFrame = new THREE.Mesh(
-    new THREE.BoxGeometry(1.9, 2.45, 0.22),
-    new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5 })
+    new THREE.BoxGeometry(2.05, 2.5, 0.24),
+    new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.45 })
   );
-  doorFrame.position.set(0, 1.25, 0.04);
+  doorFrame.position.set(0, 1.25, 0.05);
   g.add(doorFrame);
 
   const doorGlass = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.55, 2.15),
+    new THREE.PlaneGeometry(1.7, 2.2),
     new THREE.MeshStandardMaterial({
       color: 0x7dd3fc,
-      emissive: 0x0284c7,
+      emissive: 0xfef08a,
       emissiveIntensity: 0.28,
-      roughness: 0.2,
+      roughness: 0.18,
     })
   );
-  doorGlass.position.set(0, 1.24, 0.16);
+  doorGlass.position.set(0, 1.24, 0.18);
   g.add(doorGlass);
+
+  // Center door mullion + metallic pull handles
+  const centerBar = new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 2.2, 0.05),
+    new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4 })
+  );
+  centerBar.position.set(0, 1.24, 0.19);
+  g.add(centerBar);
+  for (const hx of [-0.14, 0.14]) {
+    const handle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.02, 0.02, 0.42, 6),
+      new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.7, roughness: 0.25 })
+    );
+    handle.position.set(hx, 1.15, 0.22);
+    g.add(handle);
+  }
+
+  // Two large glowing storefront display windows flanking the entrance door!
+  for (const wx of [-2.15, 2.15]) {
+    const winFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(1.85, 1.85, 0.18),
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 })
+    );
+    winFrame.position.set(wx, 1.5, 0.05);
+    g.add(winFrame);
+
+    const winGlass = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.62, 1.6),
+      new THREE.MeshStandardMaterial({
+        color: 0xbae6fd,
+        emissive: 0xfde68a,
+        emissiveIntensity: 0.34,
+        roughness: 0.15,
+      })
+    );
+    winGlass.position.set(wx, 1.5, 0.15);
+    g.add(winGlass);
+  }
+
+  // Sloped storefront awning above the door & windows
+  const awning = new THREE.Mesh(
+    new THREE.BoxGeometry(6.2, 0.16, 1.05),
+    new THREE.MeshStandardMaterial({ color: typeMeta.awning, roughness: 0.7 })
+  );
+  awning.position.set(0, 2.66, 0.52);
+  awning.rotation.x = 0.28;
+  g.add(awning);
 
   // Welcome mat outside the door so kids know they can walk right in!
   const matMesh = new THREE.Mesh(
@@ -498,27 +853,15 @@ function createPublicEntrance(b, mats) {
   matMesh.position.set(0, 0.18, 0.72);
   g.add(matMesh);
 
-  // Storefront name fascia right above the door on the building wall!
-  const typeMeta = {
-    restaurant: { emoji: '🍽️', bg: '#b91c1c' },
-    cafe: { emoji: '☕', bg: '#92400e' },
-    grocery: { emoji: '🛒', bg: '#15803d' },
-    library: { emoji: '📚', bg: '#0369a1' },
-    school: { emoji: '🏫', bg: '#b91c1c' },
-    church: { emoji: '⛪', bg: '#4338ca' },
-    pharmacy: { emoji: '💊', bg: '#0f766e' },
-    bank: { emoji: '🏦', bg: '#1d4ed8' },
-    shop: { emoji: '🛍️', bg: '#7c3aed' },
-  }[b.placeType] || { emoji: '🏬', bg: '#0f766e' };
-
+  // Storefront name fascia right above the awning
   const title = b.name ? `${typeMeta.emoji} ${b.name}` : `${typeMeta.emoji} Westdale Shop`;
   const sub = b.houseNumber ? `#${b.houseNumber} • Walk In!` : 'Public Entrance • Walk In!';
   const signTex = makeSignTexture([title, sub], typeMeta.bg, '#ffffff', '#fde047', 640, 180);
   const signBoard = new THREE.Mesh(
-    new THREE.BoxGeometry(4.4, 1.2, 0.16),
+    new THREE.BoxGeometry(4.8, 1.2, 0.16),
     new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.4 })
   );
-  signBoard.position.set(0, 3.35, 0.16);
+  signBoard.position.set(0, 3.55, 0.16);
   g.add(signBoard);
 
   return g;
@@ -651,17 +994,29 @@ export function buildChunkMesh(bucket, allRoads = null) {
     yellowLine: new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.65 }),
     whiteLine: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 }),
     edgeLine: new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.7 }),
-    parkGrass: new THREE.MeshStandardMaterial({ color: 0x86efac, roughness: 0.95 }),
-    schoolGrass: new THREE.MeshStandardMaterial({ color: 0xa7f3d0, roughness: 0.95 }),
+    parkGrass: new THREE.MeshStandardMaterial({ color: 0x67a548, map: getAreaGrassTexture(), roughness: 1 }),
+    schoolGrass: new THREE.MeshStandardMaterial({ color: 0x78b356, map: getAreaGrassTexture(), roughness: 1 }),
+    pitchGrass: new THREE.MeshStandardMaterial({ color: 0x5fa845, map: getPitchTexture(), roughness: 1 }),
+    woodFloor: new THREE.MeshStandardMaterial({ color: 0x55783a, map: getAreaGrassTexture(), roughness: 1 }),
     pole: new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.35, roughness: 0.5 }),
-    roofSchool: new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.75 }),
+    roofSchool: new THREE.MeshStandardMaterial({ color: 0xb8322a, roughness: 0.75 }),
     roofChurch: new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.75 }),
   };
+  // Grass textures are cached & shared across chunks — don't dispose them on unload
+  for (const k of ['parkGrass', 'schoolGrass', 'pitchGrass', 'woodFloor']) mats[k].userData.sharedMap = true;
 
   // 1. Parks & School Grounds
   for (const park of bucket.parks) {
     const geom = createExtrudedPolygon(park.polygon, 0.04, 0.01);
-    const mesh = new THREE.Mesh(geom, park.kind === 'school_grounds' ? mats.schoolGrass : mats.parkGrass);
+    const mat =
+      park.kind === 'school_grounds'
+        ? mats.schoolGrass
+        : park.kind === 'pitch'
+          ? mats.pitchGrass
+          : park.kind === 'wood' || park.kind === 'nature_reserve'
+            ? mats.woodFloor
+            : mats.parkGrass;
+    const mesh = new THREE.Mesh(geom, mat);
     mesh.receiveShadow = true;
     group.add(mesh);
   }
@@ -777,32 +1132,100 @@ export function buildChunkMesh(bucket, allRoads = null) {
     }
   }
 
-  // 6. Buildings & Landmarks
-  for (const b of bucket.buildings) {
-    let color = HOUSE_COLORS[b.id % HOUSE_COLORS.length];
-    if (b.category === 'home') color = 0xf472b6; // Bright cheerful pink-coral "Your House"
-    else if (b.category === 'school') color = 0xf59e0b;
-    else if (b.category === 'other_school') color = 0xd97706;
-    else if (b.category === 'library') color = 0x0ea5e9;
-    else if (b.category === 'church') color = 0xfef9c3;
-    else if (b.category === 'shop') color = SHOP_COLORS[b.id % SHOP_COLORS.length];
+  // 6. Buildings & Landmarks (with architectural window facades, roofs, & front doors!)
+  const facadeTexHouse = makeBuildingFacadeTexture('house');
+  const facadeTexShop = makeBuildingFacadeTexture('shop');
+  const facadeTexCivic = makeBuildingFacadeTexture('civic');
+  const facadeTexBrick = BRICK_STYLES.map((st) => getBrickFacade(st));
+  const facadeTexShopBrick = BRICK_STYLES.map((st) => getBrickFacade(`shop-${st}`));
+  const sharedFacades = [...facadeTexBrick, ...facadeTexShopBrick];
+  const roofMats = [
+    new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.88 }),
+    new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.88 }),
+    new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.88 }),
+    new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.88 }),
+  ];
 
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.78 });
+  const roofsGroup = new THREE.Group();
+  const gableMatCache = new Map();
+  for (const b of bucket.buildings) {
+    let color = HOUSE_COLORS[Math.abs(b.id) % HOUSE_COLORS.length];
+    let facadeTex = facadeTexHouse;
+    const idh = Math.abs(b.id);
+    if (b.category === 'house' && idh % 10 < 6) {
+      // ~60% of houses are Westdale brick (untinted, colour lives in the texture)
+      facadeTex = facadeTexBrick[(idh >> 2) % facadeTexBrick.length];
+      color = 0xffffff;
+    }
+    if (b.category === 'home') color = 0xf4a6c0; // Soft pink "Your House" so it's easy to spot
+    else if (b.category === 'school') {
+      color = 0xd9825b; // warm red-brick school
+      facadeTex = facadeTexCivic;
+    } else if (b.category === 'other_school') {
+      color = 0xc98f62;
+      facadeTex = facadeTexCivic;
+    } else if (b.category === 'library') {
+      color = 0xffffff; // buff brick, blue trim & sign carry the library colour
+      facadeTex = facadeTexBrick[2];
+    } else if (b.category === 'church') {
+      color = 0xfef9c3;
+      facadeTex = facadeTexCivic;
+    } else if (b.isApartment) {
+      // Brick walk-up apartments
+      color = 0xffffff;
+      facadeTex = facadeTexBrick[idh % 2];
+    } else if (b.category === 'shop' || b.isPublicAccess) {
+      // Westdale Village: brick storefronts (awnings & signs add the colour), some painted stucco
+      if (idh % 5 < 4) {
+        color = 0xffffff;
+        facadeTex = facadeTexShopBrick[(idh >> 1) % facadeTexShopBrick.length];
+      } else {
+        color = SHOP_COLORS[idh % SHOP_COLORS.length];
+        facadeTex = facadeTexShop;
+      }
+    }
+
+    const wallMat = new THREE.MeshStandardMaterial({ color, map: facadeTex, roughness: 0.74 });
+    if (sharedFacades.includes(facadeTex)) wallMat.userData.sharedMap = true;
+    const roofMat =
+      b.category === 'school'
+        ? mats.roofSchool
+        : b.category === 'church'
+          ? mats.roofChurch
+          : roofMats[Math.abs(b.id) % roofMats.length];
     const geom = createExtrudedPolygon(b.polygon, b.height, 0);
-    const mesh = new THREE.Mesh(geom, mat);
+    // Group 0 = top/bottom caps (roof), Group 1 = extruded side walls (windows & brick/siding!)
+    const mesh = new THREE.Mesh(geom, [roofMat, wallMat]);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     group.add(mesh);
 
+    // Pitched gable/hip roof with shingles on houses (flat roofs stay on odd/large footprints)
+    let roofRise = 0;
+    if ((b.category === 'house' || b.category === 'home') && !b.isApartment) {
+      let gableColor = facadeTex === facadeTexHouse ? color : [0x96503a, 0x75503a, 0xc9ab7d][(idh >> 2) % 3];
+      if (b.category === 'home') gableColor = color;
+      if (!gableMatCache.has(gableColor)) {
+        gableMatCache.set(gableColor, new THREE.MeshStandardMaterial({ color: gableColor, roughness: 0.8, side: THREE.DoubleSide }));
+      }
+      const roof = buildHouseRoof(b, b.height, gableMatCache.get(gableColor));
+      if (roof) {
+        roofsGroup.add(roof);
+        roofRise = roof.userData.roofRise || 0;
+      }
+    }
+
     if (b.category === 'home') {
-      const trimGeom = createExtrudedPolygon(b.polygon, 0.6, b.height);
-      group.add(new THREE.Mesh(trimGeom, new THREE.MeshStandardMaterial({ color: 0xdb2777, roughness: 0.7 })));
+      if (!roofRise) {
+        const trimGeom = createExtrudedPolygon(b.polygon, 0.6, b.height);
+        group.add(new THREE.Mesh(trimGeom, new THREE.MeshStandardMaterial({ color: 0xdb2777, roughness: 0.7 })));
+      }
 
       const sign = createLandmarkSign(
         '🏠 Your House',
         b.houseNumber ? `#${b.houseNumber} • Walk or Catch the Bus!` : 'Walk or Catch the Bus!',
         b.centroid.x,
-        b.height + 2.4,
+        b.height + roofRise + 2.4,
         b.centroid.z,
         '#be185d',
         6.5
@@ -824,7 +1247,10 @@ export function buildChunkMesh(bucket, allRoads = null) {
       group.add(sign);
     } else if (b.category === 'library') {
       const trimGeom = createExtrudedPolygon(b.polygon, 0.6, b.height);
-      group.add(new THREE.Mesh(trimGeom, new THREE.MeshStandardMaterial({ color: 0x0369a1, roughness: 0.7 })));
+      group.add(new THREE.Mesh(trimGeom, [
+        new THREE.MeshStandardMaterial({ color: 0x5b6470, roughness: 0.85 }), // slate roof
+        new THREE.MeshStandardMaterial({ color: 0x1d5f99, roughness: 0.6 }), // blue parapet band
+      ]));
 
       const sign = createLandmarkSign(
         'Westdale Library',
@@ -850,27 +1276,37 @@ export function buildChunkMesh(bucket, allRoads = null) {
       group.add(sign);
     }
 
-    // Show street number plaque on every house/building facade, and welcoming entrance on public places!
+    // Welcoming storefront entrance on public places, and realistic 3D front door + doormat on every house!
     if (b.isPublicAccess && b.frontPt) {
       group.add(createPublicEntrance(b, mats));
-    } else if (b.houseNumber && b.frontPt) {
-      group.add(createHouseNumberPlaque(b.houseNumber, b.frontPt, b.frontAngle || 0));
+    } else {
+      const doorAnchor = b.frontPt
+        ? {
+            x: b.frontPt.x - Math.sin(b.frontAngle || 0) * 0.27,
+            z: b.frontPt.z - Math.cos(b.frontAngle || 0) * 0.27,
+            angle: b.frontAngle || 0,
+          }
+        : getBuildingDoorAnchor(b);
+      if (doorAnchor) {
+        group.add(createHouseDoor(doorAnchor, b.id));
+      }
+      if (b.houseNumber && b.frontPt) {
+        group.add(createHouseNumberPlaque(b.houseNumber, b.frontPt, b.frontAngle || 0));
+      }
     }
   }
 
-  // 7. Decorative trees along parks
-  let treeCount = 0;
-  for (const park of bucket.parks) {
-    if (treeCount > 24) break;
-    for (let i = 0; i < park.polygon.length; i += 3) {
-      if (treeCount > 24) break;
-      const p = park.polygon[i];
-      const tx = p.x + (park.centroid.x - p.x) * 0.22;
-      const tz = p.z + (park.centroid.z - p.z) * 0.22;
-      group.add(createLowPolyTree(tx, tz, 0.9 + (treeCount % 3) * 0.2));
-      treeCount++;
-    }
-  }
+  // Merge every roof / gable / chimney in this chunk into one mesh per material (≈6 draw calls total)
+  group.add(mergeByMaterial(roofsGroup));
+
+  // 7. Parking lots (stalls + parked cars) and street parking on quiet side streets
+  const parking = buildParking(bucket, allRoads);
+  group.add(parking);
+
+  // 8. Street trees, park groves, yard trees & shrubs (instanced, wind-swayed)
+  const vegetation = buildVegetation(bucket, allRoads, parking.userData.parkedCarColliders);
+  group.add(vegetation);
+  group.userData.parkedCarColliders = [...parking.userData.parkedCarColliders, ...vegetation.userData.treeColliders];
 
   return group;
 }
@@ -1292,236 +1728,226 @@ export function createUberCarMesh() {
   return g;
 }
 
+/**
+ * Creates a bright white & red low-poly 3D Ambulance with flashing roof lights
+ * to rescue the player to the hospital if health reaches 0.
+ */
+export function createAmbulanceMesh() {
+  const g = new THREE.Group();
+  g.name = 'ambulanceCar';
+
+  const white = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 });
+  const red = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.45 });
+  const glass = new THREE.MeshStandardMaterial({ color: 0xbae6fd, roughness: 0.25 });
+
+  // Ambulance box body + cab
+  const box = new THREE.Mesh(new THREE.BoxGeometry(2.25, 1.85, 3.6), white);
+  box.position.set(0, 1.32, -0.6);
+  box.castShadow = true;
+  g.add(box);
+
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.29, 0.26, 3.64), red);
+  stripe.position.set(0, 1.05, -0.6);
+  g.add(stripe);
+
+  // Red cross emblem on both sides
+  for (const sx of [-1.15, 1.15]) {
+    const vBar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.65, 0.2), red);
+    vBar.position.set(sx, 1.55, -0.6);
+    const hBar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.65), red);
+    hBar.position.set(sx, 1.55, -0.6);
+    g.add(vBar, hBar);
+  }
+
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.1, 1.45, 1.65), white);
+  cab.position.set(0, 1.12, 1.9);
+  const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.62, 0.1), glass);
+  windshield.position.set(0, 1.4, 2.74);
+  g.add(cab, windshield);
+
+  // Flashing red & white roof siren lights
+  const redLightMat = new THREE.MeshBasicMaterial({ color: 0xff2222 });
+  const whiteLightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const lampL = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.22, 0.3), redLightMat);
+  lampL.position.set(-0.45, 2.34, 1.2);
+  const lampR = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.22, 0.3), whiteLightMat);
+  lampR.position.set(0.45, 2.34, 1.2);
+  g.add(lampL, lampR);
+
+  // Wheels
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 });
+  const wheelGeom = new THREE.CylinderGeometry(0.38, 0.38, 0.28, 10);
+  wheelGeom.rotateZ(Math.PI / 2);
+  for (const wz of [-1.5, 1.8]) {
+    for (const wx of [-1.1, 1.1]) {
+      const w = new THREE.Mesh(wheelGeom, wheelMat);
+      w.position.set(wx, 0.38, wz);
+      g.add(w);
+    }
+  }
+
+  g.userData = { redLightMat, whiteLightMat };
+  return g;
+}
+
+/**
+ * Creates a 3D Police Officer riding a Bicycle (with spinning wheels, handlebars,
+ * navy police uniform, helmet & flashing blue/red bike light) who arrives to confiscate
+ * throwing items if the player hits a pedestrian.
+ */
+export function createBikePoliceMesh() {
+  const g = new THREE.Group();
+  g.name = 'bikePolice';
+
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.45, metalness: 0.35 });
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 });
+  const uniformMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.65 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xf1c27d, roughness: 0.6 });
+  const helmetMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4 });
+  const badgeMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3, metalness: 0.6 });
+
+  // Front & rear bicycle wheels
+  const wheelGeom = new THREE.TorusGeometry(0.36, 0.06, 8, 16);
+  wheelGeom.rotateY(Math.PI / 2);
+  const frontWheel = new THREE.Mesh(wheelGeom, tireMat);
+  frontWheel.position.set(0, 0.38, 0.65);
+  const rearWheel = new THREE.Mesh(wheelGeom, tireMat);
+  rearWheel.position.set(0, 0.38, -0.65);
+  g.add(frontWheel, rearWheel);
+
+  // Bike frame & handlebars
+  const frameBar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.3), frameMat);
+  frameBar.position.set(0, 0.62, 0);
+  const fork = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.65, 0.08), frameMat);
+  fork.position.set(0, 0.68, 0.56);
+  fork.rotation.x = -0.25;
+  const handlebar = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.06, 0.06), tireMat);
+  handlebar.position.set(0, 1.0, 0.48);
+  g.add(frameBar, fork, handlebar);
+
+  // Sculpted Bike Police Officer seated on bike
+  const officer = createStylizedHumanMesh({
+    scale: 0.92,
+    skinColor: 0xf1c27d,
+    hairColor: 0x1e293b,
+    hairStyle: 'helmet',
+    topColor: 0x1d4ed8,
+    pantsColor: 0x0f172a,
+    shoeColor: 0x111827,
+    accentColor: 0xfacc15,
+    outfitStyle: 'jacket',
+    seated: true,
+  });
+  officer.position.set(0, 0.56, -0.14);
+  officer.userData.torsoGroup.rotation.x = 0.25;
+  officer.userData.leftArmPivot.rotation.x = -1.05;
+  officer.userData.rightArmPivot.rotation.x = -1.05;
+  const badge = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.03), badgeMat);
+  badge.position.set(0.1, 0.38, 0.2);
+  officer.userData.torsoGroup.add(badge);
+  g.add(officer);
+
+  // Flashing blue & red bike light on handlebars
+  const blueLightMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6 });
+  const redLightMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+  const bLamp = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), blueLightMat);
+  bLamp.position.set(-0.18, 1.08, 0.54);
+  const rLamp = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), redLightMat);
+  rLamp.position.set(0.18, 1.08, 0.54);
+  g.add(bLamp, rLamp);
+
+  // Floating label
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(30, 58, 138, 0.9)';
+  ctx.beginPath();
+  ctx.roundRect(6, 8, 244, 48, 22);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '900 22px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🚴‍♂️ Bike Police', 128, 33);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const label = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.9, depthWrite: false })
+  );
+  label.scale.set(1.35, 0.33, 1);
+  label.position.set(0, 2.28, 0);
+  g.add(label);
+
+  g.userData = { blueLightMat, redLightMat, frontWheel, rearWheel };
+  return g;
+}
+
 export const DEFAULT_AVATAR_CONFIG = {
-  skinColor: '#ffdbac',
-  hairStyle: 'cap', // 'short' | 'long' | 'pigtails' | 'curly' | 'cap'
-  hairColor: '#3b2f2f',
-  outfitStyle: 'hoodie', // 'hoodie' | 'tshirt' | 'jacket'
+  character: 'm_casual', // which 3D body/outfit model (see PLAYER_CHARACTERS)
+  skinColor: '#f1c27d',
+  hairColor: '#4a2f1b',
   topColor: '#ef4444',
   pantsColor: '#1e3a8a',
-  backpackColor: '#facc15',
+  shoeColor: '#f8fafc',
+  backpackColor: '#facc15', // or 'none'
+  hair: 'own', // see HAIR_STYLES ('own' = the character's original hair)
+  hat: 'none', // 'none' | 'cap' | 'beanie' | 'hardhat' | 'sunhat'
+  hatColor: '#2563eb',
+  glasses: 'none', // 'none' | 'round' | 'shades'
+  // Used only by the low-poly fallback avatar while 3D models are still loading
+  hairStyle: 'short',
+  outfitStyle: 'hoodie',
 };
 
 /**
- * Creates a cheerful, customizable low-poly Student Avatar with a 3D face
- * (eyes, eyebrows, nose, ears, smiling mouth, rosy cheeks), selectable hairstyle,
- * outfit style, colors, and animated walking limbs.
+ * Creates the player's avatar from the customizer config: a rigged 3D character with the
+ * chosen skin / hair / clothing colours plus bone-attached backpack, hat and glasses.
+ * Falls back to the low-poly student while the GLB models are still loading.
  */
 export function createPlayerAvatarMesh(rawConfig = {}) {
   const cfg = { ...DEFAULT_AVATAR_CONFIG, ...rawConfig };
-  const g = new THREE.Group();
-  g.name = 'playerAvatar';
 
-  const pantsMat = new THREE.MeshStandardMaterial({ color: cfg.pantsColor, roughness: 0.8 });
-  const shoeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
-  const topMat = new THREE.MeshStandardMaterial({ color: cfg.topColor, roughness: 0.65 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: cfg.skinColor, roughness: 0.6 });
-  const hairMat = new THREE.MeshStandardMaterial({ color: cfg.hairColor, roughness: 0.82 });
-  const packMat = new THREE.MeshStandardMaterial({ color: cfg.backpackColor, roughness: 0.6 });
-  const darkMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.4 });
-  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
-  const blushMat = new THREE.MeshStandardMaterial({ color: 0xfb7185, roughness: 0.8 });
-  const mouthMat = new THREE.MeshStandardMaterial({ color: 0xbe123c, roughness: 0.6 });
-
-  // Legs with hip pivots
-  const leftLegPivot = new THREE.Group();
-  leftLegPivot.position.set(-0.13, 0.58, 0);
-  const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.54, 0.18), pantsMat);
-  leftLeg.position.y = -0.27;
-  leftLeg.castShadow = true;
-  const leftShoe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.28), shoeMat);
-  leftShoe.position.set(0, -0.53, 0.04);
-  leftLegPivot.add(leftLeg, leftShoe);
-  g.add(leftLegPivot);
-
-  const rightLegPivot = new THREE.Group();
-  rightLegPivot.position.set(0.13, 0.58, 0);
-  const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.54, 0.18), pantsMat);
-  rightLeg.position.y = -0.27;
-  rightLeg.castShadow = true;
-  const rightShoe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.28), shoeMat);
-  rightShoe.position.set(0, -0.53, 0.04);
-  rightLegPivot.add(rightLeg, rightShoe);
-  g.add(rightLegPivot);
-
-  // Torso (hoodie, t-shirt, or zip-up jacket)
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.58, 0.28), topMat);
-  torso.position.y = 0.87;
-  torso.castShadow = true;
-  g.add(torso);
-
-  if (cfg.outfitStyle === 'jacket') {
-    const zipStripe = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.57, 0.295), whiteMat);
-    zipStripe.position.y = 0.87;
-    g.add(zipStripe);
-  } else if (cfg.outfitStyle === 'hoodie') {
-    const hood = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.16, 0.14), topMat);
-    hood.position.set(0, 1.12, -0.15);
-    g.add(hood);
+  const glbAvatar = createRealisticHumanInstance({
+    variant: cfg.character || 'm_casual',
+    scale: 0.92,
+    topColor: cfg.topColor,
+    pantsColor: cfg.pantsColor,
+    shoeColor: cfg.shoeColor,
+    skinColor: cfg.skinColor,
+    skinBlend: 0.85,
+    hairColor: cfg.hairColor,
+    showBeard: false,
+    showHeadwear: false,
+    seated: false,
+  });
+  if (glbAvatar) {
+    addAvatarAccessories(glbAvatar, {
+      hair: cfg.hair,
+      hairColor: cfg.hairColor,
+      backpackColor: cfg.backpackColor,
+      hat: cfg.hat,
+      hatColor: cfg.hatColor,
+      glasses: cfg.glasses,
+    });
+    glbAvatar.name = 'playerAvatar';
+    return glbAvatar;
   }
 
-  // Neck
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.095, 0.12, 10), skinMat);
-  neck.position.y = 1.19;
-  g.add(neck);
-
-  // School backpack on the back (-Z is back when facing +Z)
-  const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.42, 0.17), packMat);
-  backpack.position.set(0, 0.88, -0.22);
-  backpack.castShadow = true;
-  g.add(backpack);
-
-  // Arms with shoulder pivots (short sleeves for t-shirt, full sleeves for hoodie/jacket + cute hands)
-  const buildArm = (xPos) => {
-    const pivot = new THREE.Group();
-    pivot.position.set(xPos, 1.1, 0);
-    if (cfg.outfitStyle === 'tshirt') {
-      const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 0.16), topMat);
-      sleeve.position.y = -0.08;
-      const lowerArm = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.28, 0.13), skinMat);
-      lowerArm.position.y = -0.3;
-      pivot.add(sleeve, lowerArm);
-    } else {
-      const fullArm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.44, 0.15), topMat);
-      fullArm.position.y = -0.2;
-      pivot.add(fullArm);
-    }
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), skinMat);
-    hand.position.y = -0.46;
-    pivot.add(hand);
-    return pivot;
-  };
-  const leftArmPivot = buildArm(-0.32);
-  const rightArmPivot = buildArm(0.32);
-  g.add(leftArmPivot, rightArmPivot);
-
-  // Head + Expressive 3D Face (faces +Z)
-  const headGroup = new THREE.Group();
-  headGroup.position.set(0, 1.43, 0);
-
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 14), skinMat);
-  head.castShadow = true;
-  headGroup.add(head);
-
-  // Ears (left & right)
-  const earGeom = new THREE.SphereGeometry(0.055, 10, 8);
-  earGeom.scale(0.65, 1.0, 0.85);
-  const leftEar = new THREE.Mesh(earGeom, skinMat);
-  leftEar.position.set(-0.23, -0.01, 0.01);
-  const rightEar = new THREE.Mesh(earGeom, skinMat);
-  rightEar.position.set(0.23, -0.01, 0.01);
-  headGroup.add(leftEar, rightEar);
-
-  // Eyes (white sclera + dark pupils + shiny catchlights + eyebrows)
-  for (const sx of [-0.085, 0.085]) {
-    const eyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.044, 10, 10), whiteMat);
-    eyeWhite.position.set(sx, 0.035, 0.205);
-    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 10), darkMat);
-    pupil.position.set(sx, 0.035, 0.232);
-    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 6), whiteMat);
-    glint.position.set(sx + 0.01, 0.047, 0.248);
-    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.018, 0.02), hairMat);
-    brow.position.set(sx, 0.095, 0.215);
-    headGroup.add(eyeWhite, pupil, glint, brow);
-  }
-
-  // Cute 3D Nose
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), skinMat);
-  nose.scale.set(0.95, 0.85, 1.2);
-  nose.position.set(0, -0.015, 0.238);
-  headGroup.add(nose);
-
-  // Rosy Cheeks
-  for (const sx of [-0.13, 0.13]) {
-    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 8), blushMat);
-    cheek.scale.set(1.1, 0.7, 0.4);
-    cheek.position.set(sx, -0.04, 0.205);
-    headGroup.add(cheek);
-  }
-
-  // Smiling Mouth (3D curved arc)
-  const smileGeom = new THREE.TorusGeometry(0.06, 0.014, 8, 16, Math.PI * 0.82);
-  const mouth = new THREE.Mesh(smileGeom, mouthMat);
-  mouth.position.set(0, -0.065, 0.212);
-  mouth.rotation.z = Math.PI * 1.09;
-  headGroup.add(mouth);
-
-  // Selectable Hairstyles
-  if (cfg.hairStyle === 'cap') {
-    const capMat = new THREE.MeshStandardMaterial({ color: cfg.topColor, roughness: 0.7 });
-    const hairBack = new THREE.Mesh(
-      new THREE.SphereGeometry(0.248, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.58),
-      hairMat
-    );
-    hairBack.position.y = 0.02;
-    const capDome = new THREE.Mesh(
-      new THREE.SphereGeometry(0.256, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.48),
-      capMat
-    );
-    capDome.position.y = 0.045;
-    const capBrim = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.04, 0.22), capMat);
-    capBrim.position.set(0, 0.075, 0.22);
-    headGroup.add(hairBack, capDome, capBrim);
-  } else if (cfg.hairStyle === 'long') {
-    const hairTop = new THREE.Mesh(
-      new THREE.SphereGeometry(0.255, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.56),
-      hairMat
-    );
-    hairTop.position.y = 0.025;
-    const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.16), hairMat);
-    hairBack.position.set(0, -0.14, -0.17);
-    const sideL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.38, 0.18), hairMat);
-    sideL.position.set(-0.22, -0.1, -0.03);
-    const sideR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.38, 0.18), hairMat);
-    sideR.position.set(0.22, -0.1, -0.03);
-    headGroup.add(hairTop, hairBack, sideL, sideR);
-  } else if (cfg.hairStyle === 'pigtails') {
-    const hairTop = new THREE.Mesh(
-      new THREE.SphereGeometry(0.255, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.56),
-      hairMat
-    );
-    hairTop.position.y = 0.025;
-    const puffGeom = new THREE.SphereGeometry(0.135, 12, 10);
-    const puffL = new THREE.Mesh(puffGeom, hairMat);
-    puffL.position.set(-0.29, 0.06, -0.05);
-    const puffR = new THREE.Mesh(puffGeom, hairMat);
-    puffR.position.set(0.29, 0.06, -0.05);
-    const tieMat = new THREE.MeshStandardMaterial({ color: cfg.backpackColor, roughness: 0.5 });
-    const tieL = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.018, 6, 12), tieMat);
-    tieL.position.set(-0.24, 0.06, -0.04);
-    tieL.rotation.y = Math.PI / 2;
-    const tieR = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.018, 6, 12), tieMat);
-    tieR.position.set(0.24, 0.06, -0.04);
-    tieR.rotation.y = Math.PI / 2;
-    headGroup.add(hairTop, puffL, puffR, tieL, tieR);
-  } else if (cfg.hairStyle === 'curly') {
-    const curlOffsets = [
-      [0, 0.2, 0], [-0.14, 0.17, 0.04], [0.14, 0.17, 0.04],
-      [-0.2, 0.08, -0.05], [0.2, 0.08, -0.05], [0, 0.14, -0.16],
-      [-0.14, 0.08, -0.16], [0.14, 0.08, -0.16], [0, 0.21, 0.1],
-    ];
-    const curlGeom = new THREE.SphereGeometry(0.115, 10, 8);
-    for (const [cx, cy, cz] of curlOffsets) {
-      const c = new THREE.Mesh(curlGeom, hairMat);
-      c.position.set(cx, cy, cz);
-      headGroup.add(c);
-    }
-  } else {
-    // 'short' classic hair
-    const hairTop = new THREE.Mesh(
-      new THREE.SphereGeometry(0.255, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.54),
-      hairMat
-    );
-    hairTop.position.y = 0.03;
-    const bangs = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.07, 0.1), hairMat);
-    bangs.position.set(0, 0.16, 0.17);
-    headGroup.add(hairTop, bangs);
-  }
-
-  g.add(headGroup);
-
-  g.userData = { leftLegPivot, rightLegPivot, leftArmPivot, rightArmPivot, headGroup };
-  return g;
+  const avatar = createStylizedHumanMesh({
+    scale: 0.96,
+    skinColor: cfg.skinColor,
+    hairStyle: cfg.hairStyle,
+    hairColor: cfg.hairColor,
+    outfitStyle: cfg.outfitStyle,
+    topColor: cfg.topColor,
+    pantsColor: cfg.pantsColor,
+    backpackColor: cfg.backpackColor === 'none' ? cfg.topColor : cfg.backpackColor,
+    wristWraps: true,
+    headbandColor: cfg.topColor,
+  });
+  avatar.name = 'playerAvatar';
+  return avatar;
 }
 
 /**
@@ -1529,13 +1955,14 @@ export function createPlayerAvatarMesh(rawConfig = {}) {
  */
 export function disposeGroup(group) {
   group.traverse((obj) => {
-    if (obj.geometry) {
+    if (obj.geometry && !obj.userData?.sharedGeometry) {
       obj.geometry.dispose();
     }
     if (obj.material) {
       const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
       for (const mat of materials) {
-        if (mat.map) mat.map.dispose();
+        if (mat.userData?.shared) continue; // cached across chunks (e.g. tree materials)
+        if (mat.map && !mat.userData?.sharedMap) mat.map.dispose();
         mat.dispose();
       }
     }

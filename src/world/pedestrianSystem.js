@@ -9,6 +9,8 @@
 
 import * as THREE from 'three';
 import { dist2D } from '../geo.js';
+import { createStylizedHumanMesh, animateHumanWalk } from './characterBuilder.js';
+import { createRealisticHumanInstance, FEMALE_ARCHETYPES, MALE_ARCHETYPES } from './humanModels.js';
 
 const NPC_ROSTER = [
   {
@@ -173,57 +175,86 @@ const NPC_ROSTER = [
   },
 ];
 
-function createNpcMesh(spec) {
-  const g = new THREE.Group();
+// Additional diverse Westdale neighbors so the sidewalks feel lively & bustling (28 total pedestrians!)
+const EXTRA_NEIGHBORS = [
+  { name: 'Liam', role: 'McMaster Student', emoji: '🎓', shirtColor: 0x7f1d1d, pantsColor: 0x1f2937, skinColor: 0xffdbac, hairColor: 0x451a03, female: false, accessory: 'glasses', backpack: 0x1e293b },
+  { name: 'Sofia', role: 'Dog Walker', emoji: '🐕', shirtColor: 0xec4899, pantsColor: 0x334155, skinColor: 0xe0ac69, hairColor: 0x27272a, female: true, accessory: 'beanie' },
+  { name: 'Omar', role: 'Barista', emoji: '☕', shirtColor: 0x065f46, pantsColor: 0x1e293b, skinColor: 0xc68642, hairColor: 0x18181b, female: false, beard: true, accessory: 'cap' },
+  { name: 'Emma', role: 'Classmate', emoji: '🎒', shirtColor: 0xfacc15, pantsColor: 0x1d4ed8, skinColor: 0xffdbac, hairColor: 0x92400e, female: true, backpack: 0xf472b6 },
+  { name: 'Marcus', role: 'Coach', emoji: '⚽', shirtColor: 0xea580c, pantsColor: 0x0f172a, skinColor: 0x8d5524, hairColor: 0x18181b, female: false, accessory: 'cap' },
+  { name: 'Hannah', role: 'Musician', emoji: '🎸', shirtColor: 0x6d28d9, pantsColor: 0x111827, skinColor: 0xf1c27d, hairColor: 0x713f12, female: true, accessory: 'glasses' },
+  { name: 'Daniel', role: 'Parent', emoji: '🚶', shirtColor: 0x0284c7, pantsColor: 0x78716c, skinColor: 0xe0ac69, hairColor: 0x3b2f2f, female: false, beard: true },
+  { name: 'Aisha', role: 'Doctor', emoji: '🩺', shirtColor: 0x0d9488, pantsColor: 0x1e293b, skinColor: 0x8d5524, hairColor: 0x18181b, female: true, accessory: 'glasses' },
+  { name: 'Lucas', role: 'Skateboarder', emoji: '🛹', shirtColor: 0xdc2626, pantsColor: 0x334155, skinColor: 0xf1c27d, hairColor: 0xeab308, female: false, accessory: 'beanie', backpack: 0x38bdf8 },
+  { name: 'Mei', role: 'Artist', emoji: '🖌️', shirtColor: 0xf43f5e, pantsColor: 0x1e3a8a, skinColor: 0xffdbac, hairColor: 0x18181b, female: true, accessory: 'cap' },
+  { name: 'Ethan', role: 'Gardener', emoji: '🌿', shirtColor: 0x15803d, pantsColor: 0x78350f, skinColor: 0xf1c27d, hairColor: 0x92400e, female: false, headwear: true },
+  { name: 'Zara', role: 'Classmate', emoji: '📚', shirtColor: 0x38bdf8, pantsColor: 0x312e81, skinColor: 0xc68642, hairColor: 0x18181b, female: true, backpack: 0x22c55e },
+  { name: 'David', role: 'Architect', emoji: '📐', shirtColor: 0x475569, pantsColor: 0x0f172a, skinColor: 0xffdbac, hairColor: 0x64748b, female: false, accessory: 'glasses', beard: true },
+  { name: 'Nadia', role: 'Baker', emoji: '🧁', shirtColor: 0xfb7185, pantsColor: 0x334155, skinColor: 0xe0ac69, hairColor: 0x3b2f2f, female: true, accessory: 'chef' },
+  { name: 'Caleb', role: 'Cyclist', emoji: '🚴', shirtColor: 0x84cc16, pantsColor: 0x1e293b, skinColor: 0xf1c27d, hairColor: 0x451a03, female: false, accessory: 'cap', backpack: 0xf59e0b },
+  { name: 'Grace', role: 'Librarian', emoji: '📖', shirtColor: 0x6366f1, pantsColor: 0x1e293b, skinColor: 0xffdbac, hairColor: 0x92400e, female: true, accessory: 'glasses' },
+  { name: 'Mateo', role: 'Chef', emoji: '🍝', shirtColor: 0xf8fafc, pantsColor: 0x111827, skinColor: 0xc68642, hairColor: 0x18181b, female: false, accessory: 'chef' },
+  { name: 'Lily', role: 'Runner', emoji: '🏃‍♀️', shirtColor: 0xf97316, pantsColor: 0x0f172a, skinColor: 0xf1c27d, hairColor: 0x713f12, female: true, accessory: 'beanie' },
+].map((n) => ({
+  ...n,
+  streetPref: /.*/,
+  lines: [
+    `Hi there! I'm ${n.name} — enjoying a lovely walk through Westdale!`,
+    'Watch out for raccoons and coyotes near the side streets, and stay on the sidewalk!',
+    'Always look both ways before stepping onto a crosswalk!',
+    'Have a super safe day walking around Hamilton!',
+  ],
+}));
 
-  // Legs (pivot at hip for walking swing)
-  const legGeom = new THREE.BoxGeometry(0.18, 0.56, 0.18);
-  const pantsMat = new THREE.MeshStandardMaterial({ color: spec.pantsColor, roughness: 0.8 });
+const FULL_NPC_ROSTER = [...NPC_ROSTER, ...EXTRA_NEIGHBORS];
 
-  const leftLeg = new THREE.Mesh(legGeom, pantsMat);
-  leftLeg.position.set(-0.12, 0.28, 0);
-  leftLeg.castShadow = true;
-  g.add(leftLeg);
+function createNpcMesh(spec, idx = 0) {
+  const hairStyles = ['cap', 'long', 'chef', 'pigtails', 'spiky', 'curly', 'short', 'headband', 'short', 'long'];
+  const outfits = ['vest', 'jacket', 'tshirt', 'hoodie', 'hoodie', 'tshirt', 'jacket', 'tshirt', 'jacket', 'vest'];
+  const isFemale = spec.female !== undefined ? spec.female : /Patel|Maya|Chloe|Priya/i.test(spec.name);
+  const hasBeard = spec.beard !== undefined ? spec.beard : /Henry|Leo|Sam/i.test(spec.name);
+  const hasHeadwear = spec.headwear !== undefined ? spec.headwear : /Sam|Henry/i.test(spec.name);
+  const shoeColors = [0xf8fafc, 0x1e293b, 0x78350f, 0xdc2626, 0x2563eb, 0x15803d];
+  const heightScale = spec.role === 'Classmate' ? 0.82 + (idx % 3) * 0.03 : 0.94 + (idx % 5) * 0.035;
+  const widthScale = 0.94 + (idx % 4) * 0.04;
 
-  const rightLeg = new THREE.Mesh(legGeom, pantsMat);
-  rightLeg.position.set(0.12, 0.28, 0);
-  rightLeg.castShadow = true;
-  g.add(rightLeg);
+  // Pick from 11 distinct male & female 3D character models so people look genuinely different!
+  let variant;
+  if (/Crossing Guard|Gardener/i.test(spec.role)) {
+    variant = isFemale ? 'f_worker' : 'm_worker';
+  } else if (/Doctor|Architect|School Teacher|Parent/i.test(spec.role)) {
+    variant = isFemale ? 'f_suit' : 'm_suit';
+  } else {
+    const pool = isFemale ? FEMALE_ARCHETYPES : MALE_ARCHETYPES;
+    variant = pool[idx % pool.length];
+  }
 
-  // Torso
-  const torso = new THREE.Mesh(
-    new THREE.BoxGeometry(0.46, 0.58, 0.26),
-    new THREE.MeshStandardMaterial({ color: spec.shirtColor, roughness: 0.7 })
-  );
-  torso.position.y = 0.85;
-  torso.castShadow = true;
-  g.add(torso);
-
-  // Arms
-  const armGeom = new THREE.BoxGeometry(0.14, 0.48, 0.14);
-  const armMat = new THREE.MeshStandardMaterial({ color: spec.shirtColor, roughness: 0.7 });
-  const leftArm = new THREE.Mesh(armGeom, armMat);
-  leftArm.position.set(-0.31, 0.84, 0);
-  const rightArm = new THREE.Mesh(armGeom, armMat);
-  rightArm.position.set(0.31, 0.84, 0);
-  g.add(leftArm, rightArm);
-
-  // Head
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.21, 10, 10),
-    new THREE.MeshStandardMaterial({ color: spec.skinColor, roughness: 0.65 })
-  );
-  head.position.y = 1.36;
-  head.castShadow = true;
-  g.add(head);
-
-  // Hair / Cap
-  const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.22, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55),
-    new THREE.MeshStandardMaterial({ color: spec.hairColor, roughness: 0.85 })
-  );
-  hair.position.y = 1.38;
-  g.add(hair);
+  const g =
+    createRealisticHumanInstance({
+      variant,
+      scale: heightScale,
+      widthScale,
+      topColor: spec.shirtColor,
+      pantsColor: spec.pantsColor,
+      shoeColor: shoeColors[idx % shoeColors.length],
+      skinColor: spec.skinColor,
+      hairColor: spec.hairColor,
+      showBeard: hasBeard,
+      showHeadwear: hasHeadwear,
+      seated: false,
+      timeOffset: idx * 0.53,
+    }) ||
+    createStylizedHumanMesh({
+      scale: heightScale,
+      skinColor: spec.skinColor,
+      hairColor: spec.hairColor,
+      hairStyle: hairStyles[idx % hairStyles.length],
+      topColor: spec.shirtColor,
+      pantsColor: spec.pantsColor,
+      outfitStyle: outfits[idx % outfits.length],
+      headbandColor: 0xef4444,
+      wristWraps: spec.role === 'Runner' || spec.role === 'Classmate',
+    });
 
   // Floating subtle name tag above head
   const canvas = document.createElement('canvas');
@@ -243,13 +274,12 @@ function createNpcMesh(spec) {
   const labelTex = new THREE.CanvasTexture(canvas);
   labelTex.colorSpace = THREE.SRGBColorSpace;
   const labelSprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: labelTex, transparent: true, depthTest: false })
+    new THREE.SpriteMaterial({ map: labelTex, transparent: true, opacity: 0.9, depthWrite: false })
   );
-  labelSprite.scale.set(1.65, 0.42, 1);
-  labelSprite.position.y = 1.92;
+  labelSprite.scale.set(1.3, 0.33, 1);
+  labelSprite.position.y = 2.08;
   g.add(labelSprite);
 
-  g.userData = { leftLeg, rightLeg, leftArm, rightArm };
   return g;
 }
 
@@ -264,16 +294,29 @@ export class PedestrianSystem {
     this._spawnOnRoads(parsed.roads || []);
   }
 
+  refreshMeshes() {
+    for (let i = 0; i < this.npcs.length; i++) {
+      const npc = this.npcs[i];
+      const prevPos = npc.mesh.position.clone();
+      const prevRotY = npc.mesh.rotation.y;
+      this.group.remove(npc.mesh);
+      npc.mesh = createNpcMesh(npc, i);
+      npc.mesh.position.copy(prevPos);
+      npc.mesh.rotation.y = prevRotY;
+      this.group.add(npc.mesh);
+    }
+  }
+
   _spawnOnRoads(roads) {
     const usableRoads = roads.filter((r) => r.highway !== 'service' && r.points.length >= 2);
     if (usableRoads.length === 0) return;
 
-    for (let i = 0; i < NPC_ROSTER.length; i++) {
-      const spec = NPC_ROSTER[i];
-      // Pick a matching preferred street (with decent length), else any residential/major road
+    for (let i = 0; i < FULL_NPC_ROSTER.length; i++) {
+      const spec = FULL_NPC_ROSTER[i];
+      // Pick a matching preferred street (with decent length), else spread across neighborhood roads
       const matching = usableRoads.filter((r) => spec.streetPref.test(r.name));
       const pool = matching.length > 0 ? matching : usableRoads;
-      const road = pool[i % pool.length];
+      const road = pool[(i * 3) % pool.length];
 
       // Build sidewalk polyline on one side of this road
       const sideSign = i % 2 === 0 ? 1 : -1;
@@ -298,7 +341,7 @@ export class PedestrianSystem {
       const totalLength = cumDist[cumDist.length - 1];
       if (totalLength < 8) continue;
 
-      const mesh = createNpcMesh(spec);
+      const mesh = createNpcMesh(spec, i);
       this.group.add(mesh);
 
       this.npcs.push({
@@ -372,12 +415,15 @@ export class PedestrianSystem {
     };
   }
 
-  update(dt, playerPos) {
+  update(dt, playerPos, activeTalkNpcId = null) {
     for (const npc of this.npcs) {
-      const dPlayer = playerPos ? dist2D(playerPos.x, playerPos.z, npc.x, npc.z) : Infinity;
-      const isPausedToChat = dPlayer <= 5.5;
+      // Pedestrians mind their own business! Only pause & face the player when actively chatting (T)!
+      const isActivelyChatting =
+        activeTalkNpcId === npc.id &&
+        playerPos &&
+        dist2D(playerPos.x, playerPos.z, npc.x, npc.z) <= 6.5;
 
-      if (!isPausedToChat) {
+      if (!isActivelyChatting) {
         npc.dist += npc.dir * npc.speed * dt;
         if (npc.dist >= npc.totalLength) {
           npc.dist = npc.totalLength;
@@ -394,20 +440,20 @@ export class PedestrianSystem {
       npc.z = pose.z;
       npc.mesh.position.set(pose.x, 0.16, pose.z);
 
-      if (isPausedToChat && playerPos) {
-        // Politely face the player when close
+      if (isActivelyChatting && playerPos) {
         npc.mesh.rotation.y = Math.atan2(playerPos.x - npc.x, playerPos.z - npc.z);
       } else {
         npc.mesh.rotation.y = Math.atan2(pose.dirX, pose.dirZ);
       }
 
-      // Animate arms & legs while walking
-      const swing = isPausedToChat ? 0 : Math.sin(npc.walkPhase) * 0.45;
-      const { leftLeg, rightLeg, leftArm, rightArm } = npc.mesh.userData;
-      leftLeg.rotation.x = swing;
-      rightLeg.rotation.x = -swing;
-      leftArm.rotation.x = -swing * 0.7;
-      rightArm.rotation.x = swing * 0.7;
+      // Smooth speed-matched biomechanical walking animation!
+      if (npc.mesh.userData?.isRealisticGlb) {
+        npc.mesh.userData.setAnimState(isActivelyChatting ? 'idle' : 'walk', npc.speed);
+        npc.mesh.userData.updateAnim(dt);
+      } else {
+        npc.idleTime = (npc.idleTime || 0) + dt;
+        animateHumanWalk(npc.mesh, npc.walkPhase, !isActivelyChatting, npc.idleTime);
+      }
     }
   }
 }

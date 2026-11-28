@@ -120,6 +120,9 @@ export function fetchOverpassChunk(gx, gz) {
   way["building"](${bbox});
   node["addr:housenumber"](${bbox});
   way["leisure"~"park|playground|pitch"](${bbox});
+  way["amenity"="parking"](${bbox});
+  way["natural"="wood"](${bbox});
+  way["landuse"="forest"](${bbox});
   node["amenity"~"school|library|place_of_worship|cafe|restaurant|bakery"](${bbox});
   node["shop"](${bbox});
 );
@@ -183,6 +186,9 @@ export function fetchOverpassRadius(lat, lon, radiusM = 350) {
   way["building"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
   node["addr:housenumber"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
   way["leisure"~"park|playground|pitch"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
+  way["amenity"="parking"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
+  way["natural"="wood"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
+  way["landuse"="forest"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
   node["amenity"~"school|library|place_of_worship|cafe|restaurant|bakery"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
   node["shop"](around:${radiusM},${lat.toFixed(6)},${lon.toFixed(6)});
 );

@@ -48,7 +48,9 @@ const overpassQuery = `
   relation["building"](around:${RADIUS_M},${ORIGIN.lat},${ORIGIN.lon});
   node["addr:housenumber"](around:${RADIUS_M},${ORIGIN.lat},${ORIGIN.lon});
   way["leisure"~"park|playground|pitch"](around:${RADIUS_M},${ORIGIN.lat},${ORIGIN.lon});
-  way["amenity"~"school|library|place_of_worship"](around:${RADIUS_M},${ORIGIN.lat},${ORIGIN.lon});
+  way["amenity"~"school|library|place_of_worship|parking"](around:${RADIUS_M},${ORIGIN.lat},${ORIGIN.lon});
+  way["natural"="wood"](around:${RADIUS_M},${ORIGIN.lat},${ORIGIN.lon});
+  way["landuse"="forest"](around:${RADIUS_M},${ORIGIN.lat},${ORIGIN.lon});
   node["amenity"~"school|library|place_of_worship|cafe|restaurant|bakery"](around:${RADIUS_M},${ORIGIN.lat},${ORIGIN.lon});
   node["shop"](around:${RADIUS_M},${ORIGIN.lat},${ORIGIN.lon});
 );

@@ -7,6 +7,9 @@
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet" />
   <title>Westdale Safe Walk — Cootes Paradise Elementary</title>
 </head>
 
@@ -34,6 +37,20 @@
         <span class="star active" data-star="3">★</span>
       </div>
       <div id="points-pill" class="points-pill">🏆 100 pts</div>
+      <div class="health-bar-wrap" aria-label="Health Points">
+        <div class="health-bar-track">
+          <div id="health-bar-fill" class="health-bar-fill"></div>
+        </div>
+        <span id="health-text" class="health-text">❤️ 100 / 100</span>
+      </div>
+      <div class="weapon-switcher" role="group" aria-label="Choose Rock or Stick">
+        <button id="btn-select-rock" class="weapon-btn active" type="button" title="Select Rock (Key 1)">🪨 10 Rocks</button>
+        <button id="btn-select-stick" class="weapon-btn" type="button" title="Select Stick (Key 2)">🪵 0 Sticks</button>
+      </div>
+      <div id="stick-mode-row" class="stick-mode-row hidden" role="group" aria-label="Stick Action">
+        <button id="btn-stick-wield" class="stick-mode-btn active" type="button" title="Wield Stick to Swing (Key B)">🏏 Wield</button>
+        <button id="btn-stick-throw" class="stick-mode-btn" type="button" title="Throw Stick (Key B)">🎯 Throw</button>
+      </div>
       <div id="look-check-badge" class="look-badge hidden">👀 Looked Left &amp; Right!</div>
     </div>
 
@@ -41,16 +58,24 @@
     <div id="actions-panel" class="hud-panel">
       <button id="btn-route-hint" class="hud-btn" type="button">🗺️ Show Route Hint</button>
       <button id="btn-camera-view" class="hud-btn hud-btn-view" type="button">👁️ 3rd Person View (V)</button>
+      <button id="btn-attack-mode" class="hud-btn hud-btn-attack" type="button">🎯 Attack Mode (C)</button>
       <button id="btn-customize-avatar-hud" class="hud-btn hud-btn-avatar" type="button">🧑‍🎨 Customize Avatar</button>
       <button id="btn-call-uber" class="hud-btn hud-btn-uber" type="button">🚗 Call an Uber (U)</button>
       <button id="btn-restart-home" class="hud-btn hud-btn-restart" type="button">🔄 Restart / Change Home</button>
+      <button id="btn-graphics" class="hud-btn hud-btn-secondary" type="button" title="Graphics quality: High looks best, Low runs smoother on iPads">✨ Graphics: High</button>
+      <button id="btn-tips-toggle" class="hud-btn hud-btn-secondary" type="button" title="Show or hide friendly tip pop-ups (safety warnings always show)">💬 Tips: On</button>
       <button id="btn-pause" class="hud-btn hud-btn-secondary" type="button">⏸ Pause</button>
       <div class="controls-mini">
         <span><b>Mouse</b> Look &nbsp;•&nbsp; <b>ESC</b> Free Cursor</span>
-        <span><b>U</b> Uber &nbsp;•&nbsp; <b>R</b> Route &nbsp;•&nbsp; <b>V</b> View</span>
-        <span><b>F</b> Bus &nbsp;•&nbsp; <b>T</b> Talk &nbsp;•&nbsp; <b>G</b> Enter</span>
+        <span><b>G</b> Enter/Exit &nbsp;•&nbsp; <b>F</b> Sit/Bed/Bus &nbsp;•&nbsp; <b>T</b> Talk</span>
+        <span><b>C</b> Attack &nbsp;•&nbsp; <b>1/2</b> Rock/Stick &nbsp;•&nbsp; <b>V</b> View</span>
       </div>
     </div>
+
+    <!-- Attack Mode Banner + Mobile Throw/Swing Button + Damage Flash -->
+    
+    <button id="btn-touch-throw" class="btn-touch-throw hidden" type="button">⚾ THROW!</button>
+    <div id="damage-flash" class="damage-flash hidden" aria-hidden="true"></div>
 
     <!-- Realistic Interior Cabin Overlay when riding the School Bus or Police Car -->
     <div id="vehicle-interior" class="vehicle-interior hidden" aria-hidden="true">
@@ -74,38 +99,9 @@
         <div class="dash-right-handrail"></div>
       </div>
     </div>
-
-    <!-- NPC Talk Prompt & Speech Dialog -->
-    <button id="npc-prompt" class="npc-prompt hidden" type="button">
-      💬 Press <kbd>T</kbd> to Talk!
-    </button>
-    <div id="npc-dialog" class="npc-dialog hidden" role="status" aria-live="polite">
-      <div class="npc-dialog-header">
-        <div class="npc-dialog-title-wrap">
-          <span id="npc-dialog-name">🦺 Crossing Guard Sam</span>
-          <span id="npc-dialog-role" class="npc-role-pill">Crossing Guard</span>
-        </div>
-        <button id="btn-close-npc-dialog" class="npc-close-btn" type="button" aria-label="Close conversation">✕</button>
-      </div>
-      <p id="npc-dialog-text" class="npc-dialog-text"></p>
-      <div class="npc-dialog-hint">Press <kbd>T</kbd> for more &nbsp;•&nbsp; <kbd>X</kbd> or click ✕ to close</div>
-    </div>
-
-    <!-- Bus Boarding / Riding Prompt -->
-    <button id="bus-prompt" class="bus-prompt hidden" type="button">
-      🚌 Press <kbd>F</kbd> to Board the School Bus!
-    </button>
-
-    <!-- Enter Public Building Prompt -->
-    <button id="enter-building-prompt" class="enter-building-prompt hidden" type="button">
-      🚪 Press <kbd>G</kbd> or Walk In to Enter!
-    </button>
-
-    <!-- Center Crosshair (subtle) -->
-    <div id="crosshair" aria-hidden="true"></div>
-
-    <!-- Off-Sidewalk 5-Second Countdown Warning -->
-    <div id="sidewalk-warning" class="sidewalk-warning hidden" role="alert" aria-live="assertive">
+    <!-- Top-centre safety alert stack (below the score panel) -->
+    <div id="alert-stack" class="alert-stack">
+      <div id="sidewalk-warning" class="sidewalk-warning hidden" role="alert" aria-live="assertive">
       <div class="sidewalk-warning-title">⚠️ Get Out of the Road Lane!</div>
       <div id="sidewalk-warning-sub" class="sidewalk-warning-sub">
         Return to the sidewalk or crosswalk! Game over in <strong id="sidewalk-countdown">5.0s</strong>
@@ -114,26 +110,14 @@
         <div id="sidewalk-bar-fill" class="sidewalk-bar-fill"></div>
       </div>
     </div>
-
-    <!-- Uber Ride Banner -->
-    <div id="uber-banner" class="uber-banner hidden" role="status" aria-live="polite">
-      <div class="uber-banner-title">🚗 Uber Ride — On the Way!</div>
-      <div id="uber-banner-sub" class="uber-banner-sub">
-        Sit back and enjoy the ride to your destination!
-      </div>
-    </div>
-
-    <!-- Clear Traffic Light Warning / Status Banner (when near a signalized crosswalk) -->
-    <div id="traffic-light-hud" class="traffic-light-hud hidden" role="status" aria-live="polite">
+      <div id="traffic-light-hud" class="traffic-light-hud hidden" role="status" aria-live="polite">
       <div id="traffic-light-dot" class="traffic-light-dot"></div>
       <div class="traffic-light-copy">
         <div id="traffic-light-title" class="traffic-light-title">🔴 Light is RED — STOP!</div>
         <div id="traffic-light-sub" class="traffic-light-sub">Wait for the GREEN Walk light!</div>
       </div>
     </div>
-
-    <!-- Intersection Look Both Ways Interactive Arrow Gauge -->
-    <div id="look-warning-hud" class="look-warning-hud hidden" role="alert" aria-live="polite">
+      <div id="look-warning-hud" class="look-warning-hud hidden" role="alert" aria-live="polite">
       <div id="look-warning-title" class="look-warning-title">🚸 You are now at the intersection!</div>
       <div id="look-warning-sub" class="look-warning-sub">Look Left &amp; Right until both arrows fill up!</div>
       <div id="look-arrows-row" class="look-arrows-row">
@@ -180,12 +164,51 @@
         </svg>
       </div>
     </div>
+      <div id="uber-banner" class="uber-banner hidden" role="status" aria-live="polite">
+      <div class="uber-banner-title">🚗 Uber Ride — On the Way!</div>
+      <div id="uber-banner-sub" class="uber-banner-sub">
+        Sit back and enjoy the ride to your destination!
+      </div>
+    </div>
+    </div>
 
-    <!-- Bottom Center: Kid-Friendly Feedback Banner -->
-    <div id="feedback-banner" class="feedback-banner hidden" role="status" aria-live="polite">
+    <!-- Bottom-center prompt dock: compact action chips that never stack on top of each other -->
+    <div id="prompt-dock" class="prompt-dock">
+      <button id="enter-building-prompt" class="enter-building-prompt hidden" type="button">
+      🚪 Press <kbd>G</kbd> or Walk In to Enter!
+    </button>
+      <button id="npc-prompt" class="npc-prompt hidden" type="button">
+      💬 Press <kbd>T</kbd> to Talk!
+    </button>
+      <button id="bus-prompt" class="bus-prompt hidden" type="button">
+      🚌 Press <kbd>F</kbd> to Board the School Bus!
+    </button>
+      <div id="attack-banner" class="attack-banner hidden">
+      🎯 <strong>ATTACK MODE!</strong> <kbd>1</kbd> Rock • <kbd>2</kbd> Stick (<kbd>B</kbd> Wield/Throw) • Click / <kbd>Space</kbd> to attack!
+    </div>
+    </div>
+
+    <!-- Bottom-left message feed: tips/feedback + NPC conversations, out of the line of sight -->
+    <div id="message-feed" class="message-feed">
+      <div id="npc-dialog" class="npc-dialog hidden" role="status" aria-live="polite">
+      <div class="npc-dialog-header">
+        <div class="npc-dialog-title-wrap">
+          <span id="npc-dialog-name">🦺 Crossing Guard Sam</span>
+          <span id="npc-dialog-role" class="npc-role-pill">Crossing Guard</span>
+        </div>
+        <button id="btn-close-npc-dialog" class="npc-close-btn" type="button" aria-label="Close conversation">✕</button>
+      </div>
+      <p id="npc-dialog-text" class="npc-dialog-text"></p>
+      <div class="npc-dialog-hint">Press <kbd>T</kbd> for more &nbsp;•&nbsp; <kbd>X</kbd> or click ✕ to close</div>
+    </div>
+      <div id="feedback-banner" class="feedback-banner hidden" role="status" aria-live="polite">
       <span id="feedback-icon">🌟</span>
       <span id="feedback-text">Great job staying on the sidewalk!</span>
     </div>
+    </div>
+
+    <!-- Center Crosshair (subtle) -->
+    <div id="crosshair" aria-hidden="true"></div>
 
     <!-- Bottom Right: Synchronized 2D Leaflet Mini-Map (Expandable!) -->
     <div id="minimap-wrapper" class="hud-panel">
@@ -383,113 +406,82 @@
   </div>
 
   <!-- Avatar Customizer Overlay (Live Rotating 3D Preview) -->
+  <!-- Avatar Customizer Overlay (Live Rotating 3D Preview) -->
   <div id="overlay-avatar" class="overlay hidden">
     <div class="modal-card avatar-modal-card">
-      <h2>🧑‍🎨 Customize Your Avatar</h2>
+      <h2>🧑‍🎨 Make Your Walker</h2>
       <div class="avatar-customizer-grid">
         <div class="avatar-preview-box">
-          <canvas id="avatar-preview-canvas" width="220" height="260"></canvas>
-          <div class="avatar-preview-hint">Live 3D Preview</div>
+          <canvas id="avatar-preview-canvas" width="240" height="300"></canvas>
+          <div id="avatar-preview-name" class="avatar-preview-name">Hoodie &amp; Shorts</div>
+          <button id="btn-avatar-random" class="hud-btn hud-btn-secondary avatar-random-btn" type="button">🎲 Surprise Me</button>
         </div>
 
         <div class="avatar-options">
-          <div class="avatar-group">
-            <div class="avatar-group-label">Hairstyle</div>
-            <div class="avatar-chip-row" data-avatar-key="hairStyle">
-              <button type="button" class="av-chip" data-val="cap">🧢 Cap</button>
-              <button type="button" class="av-chip" data-val="short">✂️ Short</button>
-              <button type="button" class="av-chip" data-val="long">👱 Long</button>
-              <button type="button" class="av-chip" data-val="pigtails">🎀 Pigtails</button>
-              <button type="button" class="av-chip" data-val="curly">🌀 Curly</button>
+          <div class="avatar-tabs" role="tablist">
+            <button type="button" class="avatar-tab active" data-tab="character" role="tab">🧍 Character</button>
+            <button type="button" class="avatar-tab" data-tab="head" role="tab">💇 Hair &amp; Hat</button>
+            <button type="button" class="avatar-tab" data-tab="colors" role="tab">🎨 Colours</button>
+            <button type="button" class="avatar-tab" data-tab="gear" role="tab">🎒 Gear</button>
+          </div>
+
+          <div class="avatar-panel" data-panel="character">
+            <div id="avatar-character-grid" class="avatar-character-grid" data-avatar-key="character"></div>
+          </div>
+
+          <div class="avatar-panel hidden" data-panel="head">
+            <p id="avatar-head-note" class="avatar-fixed-note hidden">🎧 This character keeps her own hair, headphones &amp; goggles — try a different character to restyle!</p>
+            <div class="avatar-group" data-slot="hairstyle">
+              <div class="avatar-group-label">Hairstyle</div>
+              <div class="avatar-chip-row" data-avatar-key="hair"><button type="button" class="av-chip" data-val="own">✨ Original</button><button type="button" class="av-chip" data-val="spiky">Spiky</button><button type="button" class="av-chip" data-val="ponytail">Ponytail</button><button type="button" class="av-chip" data-val="parted">Side Part</button><button type="button" class="av-chip" data-val="pixie">Pixie</button><button type="button" class="av-chip" data-val="crop">Short Crop</button><button type="button" class="av-chip" data-val="bob">Bob</button><button type="button" class="av-chip" data-val="longbob">Long Bob</button><button type="button" class="av-chip" data-val="bald">Bald</button></div>
+            </div>
+            <div class="avatar-group" data-slot="haircolor">
+              <div class="avatar-group-label">Hair Colour</div>
+              <div class="avatar-swatch-row" data-avatar-key="hairColor"><button type="button" class="av-swatch" data-val="#1b1b1b" style="background:#1b1b1b" title="Black"></button><button type="button" class="av-swatch" data-val="#4a2f1b" style="background:#4a2f1b" title="Brown"></button><button type="button" class="av-swatch" data-val="#8a4b22" style="background:#8a4b22" title="Auburn"></button><button type="button" class="av-swatch" data-val="#d8b25a" style="background:#d8b25a" title="Blonde"></button><button type="button" class="av-swatch" data-val="#c0392b" style="background:#c0392b" title="Red"></button><button type="button" class="av-swatch" data-val="#e8e4dc" style="background:#e8e4dc" title="Silver"></button><button type="button" class="av-swatch" data-val="#3b6fd8" style="background:#3b6fd8" title="Blue"></button><button type="button" class="av-swatch" data-val="#e85fa8" style="background:#e85fa8" title="Pink"></button></div>
+            </div>
+            <div class="avatar-group" data-slot="hat">
+              <div class="avatar-group-label">Hat</div>
+              <div class="avatar-chip-row" data-avatar-key="hat"><button type="button" class="av-chip" data-val="none">No Hat</button><button type="button" class="av-chip" data-val="cap">🧢 Cap</button><button type="button" class="av-chip" data-val="beanie">🧶 Beanie</button><button type="button" class="av-chip" data-val="hardhat">⛑️ Hard Hat</button><button type="button" class="av-chip" data-val="sunhat">👒 Sun Hat</button></div>
+            </div>
+            <div class="avatar-group" data-slot="hatcolor">
+              <div class="avatar-group-label">Hat Colour <span class="avatar-group-note">(cap &amp; beanie)</span></div>
+              <div class="avatar-swatch-row" data-avatar-key="hatColor"><button type="button" class="av-swatch" data-val="#2563eb" style="background:#2563eb" title="Blue"></button><button type="button" class="av-swatch" data-val="#ef4444" style="background:#ef4444" title="Red"></button><button type="button" class="av-swatch" data-val="#22c55e" style="background:#22c55e" title="Green"></button><button type="button" class="av-swatch" data-val="#facc15" style="background:#facc15" title="Yellow"></button><button type="button" class="av-swatch" data-val="#a855f7" style="background:#a855f7" title="Purple"></button><button type="button" class="av-swatch" data-val="#1f2937" style="background:#1f2937" title="Black"></button><button type="button" class="av-swatch" data-val="#f8fafc" style="background:#f8fafc" title="White"></button></div>
             </div>
           </div>
 
-          <div class="avatar-group">
-            <div class="avatar-group-label">Hair Color</div>
-            <div class="avatar-swatch-row" data-avatar-key="hairColor">
-              <button type="button" class="av-swatch" data-val="#18181b" style="background:#18181b"
-                title="Black"></button>
-              <button type="button" class="av-swatch" data-val="#3b2f2f" style="background:#3b2f2f"
-                title="Dark Brown"></button>
-              <button type="button" class="av-swatch" data-val="#92400e" style="background:#92400e"
-                title="Auburn"></button>
-              <button type="button" class="av-swatch" data-val="#eab308" style="background:#eab308"
-                title="Blonde"></button>
-              <button type="button" class="av-swatch" data-val="#2563eb" style="background:#2563eb"
-                title="Blue"></button>
-              <button type="button" class="av-swatch" data-val="#ec4899" style="background:#ec4899"
-                title="Pink"></button>
-            </div>
-          </div>
-
-          <div class="avatar-group">
+          <div class="avatar-panel hidden" data-panel="colors">
+            <p id="avatar-fixed-note" class="avatar-fixed-note hidden">🎧 This character's outfit has fixed colours — try a backpack or glasses in Gear!</p>
+          <div class="avatar-group" data-slot="skin">
             <div class="avatar-group-label">Skin Tone</div>
-            <div class="avatar-swatch-row" data-avatar-key="skinColor">
-              <button type="button" class="av-swatch" data-val="#ffdbac" style="background:#ffdbac"
-                title="Light"></button>
-              <button type="button" class="av-swatch" data-val="#f1c27d" style="background:#f1c27d"
-                title="Warm Peach"></button>
-              <button type="button" class="av-swatch" data-val="#e0ac69" style="background:#e0ac69"
-                title="Golden Tan"></button>
-              <button type="button" class="av-swatch" data-val="#c68642" style="background:#c68642"
-                title="Warm Brown"></button>
-              <button type="button" class="av-swatch" data-val="#8d5524" style="background:#8d5524"
-                title="Deep Brown"></button>
-            </div>
+            <div class="avatar-swatch-row" data-avatar-key="skinColor"><button type="button" class="av-swatch" data-val="#ffe0bd" style="background:#ffe0bd" title="Fair"></button><button type="button" class="av-swatch" data-val="#f1c27d" style="background:#f1c27d" title="Peach"></button><button type="button" class="av-swatch" data-val="#e0ac69" style="background:#e0ac69" title="Golden"></button><button type="button" class="av-swatch" data-val="#c68642" style="background:#c68642" title="Tan"></button><button type="button" class="av-swatch" data-val="#8d5524" style="background:#8d5524" title="Brown"></button><button type="button" class="av-swatch" data-val="#5c3a1e" style="background:#5c3a1e" title="Deep"></button></div>
+          </div>
+          <div class="avatar-group" data-slot="top">
+            <div class="avatar-group-label">Top / Jacket</div>
+            <div class="avatar-swatch-row" data-avatar-key="topColor"><button type="button" class="av-swatch" data-val="#ef4444" style="background:#ef4444" title="Red"></button><button type="button" class="av-swatch" data-val="#f97316" style="background:#f97316" title="Orange"></button><button type="button" class="av-swatch" data-val="#facc15" style="background:#facc15" title="Yellow"></button><button type="button" class="av-swatch" data-val="#22c55e" style="background:#22c55e" title="Green"></button><button type="button" class="av-swatch" data-val="#0ea5e9" style="background:#0ea5e9" title="Sky"></button><button type="button" class="av-swatch" data-val="#6366f1" style="background:#6366f1" title="Indigo"></button><button type="button" class="av-swatch" data-val="#a855f7" style="background:#a855f7" title="Purple"></button><button type="button" class="av-swatch" data-val="#ec4899" style="background:#ec4899" title="Pink"></button><button type="button" class="av-swatch" data-val="#f8fafc" style="background:#f8fafc" title="White"></button><button type="button" class="av-swatch" data-val="#1f2937" style="background:#1f2937" title="Charcoal"></button></div>
+          </div>
+          <div class="avatar-group" data-slot="pants">
+            <div class="avatar-group-label">Pants / Shorts</div>
+            <div class="avatar-swatch-row" data-avatar-key="pantsColor"><button type="button" class="av-swatch" data-val="#1e3a8a" style="background:#1e3a8a" title="Navy"></button><button type="button" class="av-swatch" data-val="#3b82f6" style="background:#3b82f6" title="Denim"></button><button type="button" class="av-swatch" data-val="#334155" style="background:#334155" title="Slate"></button><button type="button" class="av-swatch" data-val="#0f172a" style="background:#0f172a" title="Black"></button><button type="button" class="av-swatch" data-val="#a16207" style="background:#a16207" title="Khaki"></button><button type="button" class="av-swatch" data-val="#0f766e" style="background:#0f766e" title="Teal"></button><button type="button" class="av-swatch" data-val="#7c2d12" style="background:#7c2d12" title="Rust"></button><button type="button" class="av-swatch" data-val="#e7e5e4" style="background:#e7e5e4" title="Stone"></button></div>
+          </div>
+          <div class="avatar-group" data-slot="shoes">
+            <div class="avatar-group-label">Shoes</div>
+            <div class="avatar-swatch-row" data-avatar-key="shoeColor"><button type="button" class="av-swatch" data-val="#f8fafc" style="background:#f8fafc" title="White"></button><button type="button" class="av-swatch" data-val="#111827" style="background:#111827" title="Black"></button><button type="button" class="av-swatch" data-val="#ef4444" style="background:#ef4444" title="Red"></button><button type="button" class="av-swatch" data-val="#2563eb" style="background:#2563eb" title="Blue"></button><button type="button" class="av-swatch" data-val="#22c55e" style="background:#22c55e" title="Green"></button><button type="button" class="av-swatch" data-val="#f59e0b" style="background:#f59e0b" title="Orange"></button><button type="button" class="av-swatch" data-val="#ec4899" style="background:#ec4899" title="Pink"></button></div>
+          </div>
           </div>
 
+          <div class="avatar-panel hidden" data-panel="gear">
           <div class="avatar-group">
-            <div class="avatar-group-label">Clothes Style</div>
-            <div class="avatar-chip-row" data-avatar-key="outfitStyle">
-              <button type="button" class="av-chip" data-val="hoodie">🧥 Hoodie</button>
-              <button type="button" class="av-chip" data-val="tshirt">👕 T-Shirt</button>
-              <button type="button" class="av-chip" data-val="jacket">🥼 Jacket</button>
+            <div class="avatar-group-label">School Backpack</div>
+            <div class="avatar-swatch-row" data-avatar-key="backpackColor"><button type="button" class="av-swatch av-none" data-val="none" title="None">✕</button><button type="button" class="av-swatch" data-val="#facc15" style="background:#facc15" title="Yellow"></button><button type="button" class="av-swatch" data-val="#ef4444" style="background:#ef4444" title="Red"></button><button type="button" class="av-swatch" data-val="#38bdf8" style="background:#38bdf8" title="Blue"></button><button type="button" class="av-swatch" data-val="#22c55e" style="background:#22c55e" title="Green"></button><button type="button" class="av-swatch" data-val="#a855f7" style="background:#a855f7" title="Purple"></button><button type="button" class="av-swatch" data-val="#ec4899" style="background:#ec4899" title="Pink"></button><button type="button" class="av-swatch" data-val="#1f2937" style="background:#1f2937" title="Black"></button></div>
+          </div>
+          <div class="avatar-group" data-slot="glasses">
+            <div class="avatar-group-label">Glasses</div>
+            <div class="avatar-chip-row" data-avatar-key="glasses">
+              <button type="button" class="av-chip" data-val="none">None</button>
+              <button type="button" class="av-chip" data-val="round">👓 Round</button>
+              <button type="button" class="av-chip" data-val="shades">🕶️ Shades</button>
             </div>
           </div>
-
-          <div class="avatar-group">
-            <div class="avatar-group-label">Top Color</div>
-            <div class="avatar-swatch-row" data-avatar-key="topColor">
-              <button type="button" class="av-swatch" data-val="#ef4444" style="background:#ef4444"
-                title="Red"></button>
-              <button type="button" class="av-swatch" data-val="#0ea5e9" style="background:#0ea5e9"
-                title="Sky Blue"></button>
-              <button type="button" class="av-swatch" data-val="#22c55e" style="background:#22c55e"
-                title="Green"></button>
-              <button type="button" class="av-swatch" data-val="#8b5cf6" style="background:#8b5cf6"
-                title="Purple"></button>
-              <button type="button" class="av-swatch" data-val="#f59e0b" style="background:#f59e0b"
-                title="Orange"></button>
-              <button type="button" class="av-swatch" data-val="#ec4899" style="background:#ec4899"
-                title="Pink"></button>
-            </div>
-          </div>
-
-          <div class="avatar-group">
-            <div class="avatar-group-label">Pants &amp; Backpack</div>
-            <div class="avatar-dual-row">
-              <div class="avatar-swatch-row" data-avatar-key="pantsColor">
-                <button type="button" class="av-swatch" data-val="#1e3a8a" style="background:#1e3a8a"
-                  title="Navy Jeans"></button>
-                <button type="button" class="av-swatch" data-val="#334155" style="background:#334155"
-                  title="Charcoal"></button>
-                <button type="button" class="av-swatch" data-val="#a16207" style="background:#a16207"
-                  title="Khaki"></button>
-                <button type="button" class="av-swatch" data-val="#0f766e" style="background:#0f766e"
-                  title="Teal"></button>
-              </div>
-              <span class="avatar-divider">|</span>
-              <div class="avatar-swatch-row" data-avatar-key="backpackColor">
-                <button type="button" class="av-swatch" data-val="#facc15" style="background:#facc15"
-                  title="Yellow Pack"></button>
-                <button type="button" class="av-swatch" data-val="#ef4444" style="background:#ef4444"
-                  title="Red Pack"></button>
-                <button type="button" class="av-swatch" data-val="#38bdf8" style="background:#38bdf8"
-                  title="Blue Pack"></button>
-                <button type="button" class="av-swatch" data-val="#ec4899" style="background:#ec4899"
-                  title="Pink Pack"></button>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -533,6 +525,23 @@
       <div class="modal-actions-row">
         <button id="btn-uber-cancel" class="hud-btn hud-btn-secondary modal-alt-btn" type="button">Cancel</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Hospital Treatment Overlay (after Ambulance Rescue!) -->
+  <div id="overlay-hospital" class="overlay hidden">
+    <div class="modal-card hospital-card">
+      <div class="modal-emoji">🏥🚑❤️</div>
+      <h2>Hamilton Children’s Hospital</h2>
+      <p id="hospital-status" class="modal-subtitle">
+        The ambulance brought you safely to the hospital! Doctors are patching up your scrapes...
+      </p>
+      <div class="hospital-bar-track">
+        <div id="hospital-bar-fill" class="hospital-bar-fill"></div>
+      </div>
+      <button id="btn-leave-hospital" class="primary-btn hidden" type="button">
+        ❤️ All Healed (100 HP) — Continue Walking!
+      </button>
     </div>
   </div>
 

@@ -59,6 +59,8 @@ export class ChunkManager {
         mergeById(cur.footways, bucket.footways);
         mergeById(cur.buildings, bucket.buildings);
         mergeById(cur.parks, bucket.parks);
+        cur.parkingLots = cur.parkingLots || [];
+        mergeById(cur.parkingLots, bucket.parkingLots || []);
         mergeById(cur.intersections, bucket.intersections);
         mergeById(cur.crosswalks, bucket.crosswalks);
         cur.stopSigns = cur.stopSigns || [];
@@ -144,6 +146,7 @@ export class ChunkManager {
           footways: parsed.footways,
           buildings: parsed.buildings,
           parks: parsed.parks,
+          parkingLots: parsed.parkingLots || [],
           intersections: parsed.intersections,
           crosswalks: parsed.crosswalks,
           stopSigns: parsed.stopSigns || [],
@@ -160,6 +163,22 @@ export class ChunkManager {
   /**
    * Returns all active buildings from currently loaded chunks for collision detection.
    */
+  /** Solid circles for parked cars (lots + street parking) near (px, pz). */
+  getParkedCarColliders(px, pz, radius = 30) {
+    const out = [];
+    const r2 = radius * radius;
+    for (const entry of this.loadedChunks.values()) {
+      const list = entry.group?.userData?.parkedCarColliders;
+      if (!list) continue;
+      for (const c of list) {
+        const dx = c.x - px;
+        const dz = c.z - pz;
+        if (dx * dx + dz * dz < r2) out.push(c);
+      }
+    }
+    return out;
+  }
+
   getActiveBuildings() {
     const list = [];
     for (const entry of this.loadedChunks.values()) {

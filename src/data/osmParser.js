@@ -247,6 +247,7 @@ export function parseOsmElements(elements) {
 
   const amenityPolys = [];
   const parks = [];
+  const parkingLots = [];
   const poiNodes = [];
 
   for (const node of nodeMap.values()) {
@@ -284,6 +285,7 @@ export function parseOsmElements(elements) {
         id: way.id,
         name,
         highway: tags.highway,
+        service: tags.service || '',
         ...spec,
         points: pts,
       };
@@ -302,6 +304,17 @@ export function parseOsmElements(elements) {
         footwayType: tags.footway || (tags.highway === 'cycleway' ? 'cycleway' : 'path'),
         points: pts,
       });
+    } else if (
+      tags.amenity === 'parking' &&
+      !tags.building &&
+      !/underground|multi-storey|rooftop/i.test(tags.parking || '') &&
+      pts.length >= 3
+    ) {
+      // Surface parking lot outline → painted stalls + parked cars
+      const poly = pts[0].id === pts[pts.length - 1].id ? pts.slice(0, -1) : pts;
+      if (poly.length >= 3 && polygonArea(poly) >= 60) {
+        parkingLots.push({ id: way.id, name: tags.name || '', polygon: poly, centroid: polygonCentroid(poly) });
+      }
     } else if (tags.building && pts.length >= 3) {
       const poly = pts[0].id === pts[pts.length - 1].id ? pts.slice(0, -1) : pts;
       if (poly.length >= 3 && polygonArea(poly) >= 12) {
@@ -317,7 +330,10 @@ export function parseOsmElements(elements) {
       (tags.amenity === 'school' ||
         tags.leisure === 'park' ||
         tags.leisure === 'playground' ||
-        tags.leisure === 'pitch') &&
+        tags.leisure === 'pitch' ||
+        tags.leisure === 'nature_reserve' ||
+        tags.natural === 'wood' ||
+        tags.landuse === 'forest') &&
       pts.length >= 3
     ) {
       const poly = pts[0].id === pts[pts.length - 1].id ? pts.slice(0, -1) : pts;
@@ -325,7 +341,12 @@ export function parseOsmElements(elements) {
         const item = {
           id: way.id,
           name: tags.name || '',
-          kind: tags.amenity === 'school' ? 'school_grounds' : tags.leisure || 'park',
+          kind:
+            tags.amenity === 'school'
+              ? 'school_grounds'
+              : tags.natural === 'wood' || tags.landuse === 'forest'
+                ? 'wood'
+                : tags.leisure || 'park',
           polygon: poly,
           centroid: polygonCentroid(poly),
         };
@@ -514,11 +535,15 @@ export function parseOsmElements(elements) {
     const shopTag = (t.shop || '').toLowerCase();
     const amenTag = (t.amenity || '').toLowerCase();
 
+    const parsedLevels = Number.parseInt(t['building:levels'], 10);
+    const clampFloors = (n) => Math.max(1, Math.min(4, Math.round(n)));
+    let floors = Number.isFinite(parsedLevels) && parsedLevels >= 1 ? clampFloors(parsedLevels) : 2;
+
     if (b.id === 836552889) {
       category = 'home';
       placeType = 'home';
       name = 'Your House';
-      height = 7.5;
+      floors = 2;
     } else if (
       lowerName.includes('cootes paradise') ||
       (t.building === 'school' && dist2D(b.centroid.x, b.centroid.z, 0, 0) < 70)
@@ -528,18 +553,18 @@ export function parseOsmElements(elements) {
       isPublicAccess = true;
       name = name || 'Cootes Paradise Elementary School';
       houseNumber = '900';
-      height = 10.5;
+      floors = 3;
     } else if (t.building === 'school' || lowerName.includes('school')) {
       category = 'other_school';
       placeType = 'school';
       isPublicAccess = true;
-      height = 12.0;
+      floors = Number.isFinite(parsedLevels) ? clampFloors(parsedLevels) : 3;
     } else if (amenTag === 'library' || lowerName.includes('library')) {
       category = 'library';
       placeType = 'library';
       isPublicAccess = true;
       name = 'Westdale Library';
-      height = 9.0;
+      floors = 2;
     } else if (
       t.building === 'church' ||
       amenTag === 'place_of_worship' ||
@@ -549,7 +574,7 @@ export function parseOsmElements(elements) {
       category = 'church';
       placeType = 'church';
       isPublicAccess = true;
-      height = 12.5;
+      floors = 2;
     } else if (
       ['supermarket', 'convenience', 'butcher', 'greengrocer', 'grocery'].includes(shopTag) ||
       /food basics|foodmart|market|grocery/i.test(name)
@@ -557,7 +582,7 @@ export function parseOsmElements(elements) {
       category = 'shop';
       placeType = 'grocery';
       isPublicAccess = true;
-      height = t['building:levels'] ? Math.max(6, Number(t['building:levels']) * 3.5) : 8.2;
+      floors = Number.isFinite(parsedLevels) ? clampFloors(parsedLevels) : (b.id % 3 === 0 ? 1 : 2);
     } else if (
       amenTag === 'restaurant' ||
       amenTag === 'fast_food' ||
@@ -566,7 +591,7 @@ export function parseOsmElements(elements) {
       category = 'shop';
       placeType = 'restaurant';
       isPublicAccess = true;
-      height = t['building:levels'] ? Math.max(6, Number(t['building:levels']) * 3.5) : 8.0;
+      floors = Number.isFinite(parsedLevels) ? clampFloors(parsedLevels) : (b.id % 4 === 0 ? 3 : 2);
     } else if (
       amenTag === 'cafe' ||
       shopTag === 'bakery' ||
@@ -575,17 +600,17 @@ export function parseOsmElements(elements) {
       category = 'shop';
       placeType = 'cafe';
       isPublicAccess = true;
-      height = t['building:levels'] ? Math.max(6, Number(t['building:levels']) * 3.5) : 7.8;
+      floors = Number.isFinite(parsedLevels) ? clampFloors(parsedLevels) : 2;
     } else if (amenTag === 'pharmacy' || /shoppers drug mart|pharmacy/i.test(name)) {
       category = 'shop';
       placeType = 'pharmacy';
       isPublicAccess = true;
-      height = 8.0;
+      floors = Number.isFinite(parsedLevels) ? clampFloors(parsedLevels) : 2;
     } else if (amenTag === 'bank' || /cibc|td canada|bank/i.test(name)) {
       category = 'shop';
       placeType = 'bank';
       isPublicAccess = true;
-      height = 8.5;
+      floors = Number.isFinite(parsedLevels) ? clampFloors(parsedLevels) : 2;
     } else if (
       shopTag ||
       t.building === 'retail' ||
@@ -596,16 +621,29 @@ export function parseOsmElements(elements) {
       category = 'shop';
       placeType = 'shop';
       isPublicAccess = Boolean(name || shopTag || t.building === 'retail' || t.building === 'commercial');
-      height = t['building:levels'] ? Math.max(6, Number(t['building:levels']) * 3.5) : 8.0;
+      floors = Number.isFinite(parsedLevels) ? clampFloors(parsedLevels) : (b.id % 3 === 0 ? 3 : 2);
     } else {
       category = 'house';
       placeType = 'house';
-      const levels = Number(t['building:levels']) || 2;
-      height = Math.min(11, Math.max(5.5, levels * 3.1 + (b.id % 5) * 0.35));
+      if (Number.isFinite(parsedLevels) && parsedLevels >= 1) {
+        floors = clampFloors(parsedLevels);
+      } else {
+        // Realistic mix of 1-story bungalows, 2-story family homes, and 3-story Westdale houses!
+        floors = b.id % 6 === 0 ? 1 : b.id % 5 === 0 ? 3 : 2;
+      }
     }
+
+    // Apartment blocks keep their real storey count (Westdale has 3–7 storey brick walk-ups)
+    const isApartment = t.building === 'apartments' || t.building === 'residential';
+    if (isApartment && Number.isFinite(parsedLevels) && parsedLevels >= 1) floors = Math.min(8, parsedLevels);
+    else if (isApartment) floors = Math.max(floors, 3);
+
+    // Exact 3.3m per story matches the exterior window texture repeat (1 window row = 1 interior floor!)
+    height = floors * 3.3;
 
     return {
       ...b,
+      isApartment,
       name,
       houseNumber,
       streetAddr,
@@ -614,6 +652,7 @@ export function parseOsmElements(elements) {
       category,
       placeType,
       isPublicAccess,
+      floors,
       height,
     };
   });
@@ -814,6 +853,7 @@ export function parseOsmElements(elements) {
     footways,
     buildings,
     parks,
+    parkingLots,
     intersections,
     crosswalks,
     signalNodes,
@@ -838,6 +878,7 @@ export function bucketByChunks(parsed) {
         footways: [],
         buildings: [],
         parks: [],
+        parkingLots: [],
         intersections: [],
         crosswalks: [],
         stopSigns: [],
@@ -863,6 +904,10 @@ export function bucketByChunks(parsed) {
   for (const p of parsed.parks) {
     const { gx, gz } = getChunkCoords(p.centroid.x, p.centroid.z);
     getBucket(gx, gz).parks.push(p);
+  }
+  for (const lot of parsed.parkingLots || []) {
+    const { gx, gz } = getChunkCoords(lot.centroid.x, lot.centroid.z);
+    getBucket(gx, gz).parkingLots.push(lot);
   }
   for (const inter of parsed.intersections) {
     const { gx, gz } = getChunkCoords(inter.x, inter.z);

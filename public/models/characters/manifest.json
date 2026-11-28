@@ -1,0 +1,6 @@
+{ "characters": [
+  { "id": "girl", "label": "Girl", "file": "girl.glb", "gender": "f", "heightM": 1.36, "roles": ["player"], "emoji": "🧒" },
+  { "id": "boy",  "label": "Boy",  "file": "boy.glb",  "gender": "m", "heightM": 1.33, "roles": ["player"], "emoji": "👦" },
+  { "id": "mom",  "label": "Mom",  "file": "mom.glb",  "gender": "f", "heightM": 1.66, "roles": ["mom"] },
+  { "id": "dad",  "label": "Dad",  "file": "dad.glb",  "gender": "m", "heightM": 1.80, "roles": ["dad"] }
+]}

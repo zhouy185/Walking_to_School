@@ -29,6 +29,7 @@ export class PlayerController {
     this.controls = new PointerLockControls(camera, domElement);
 
     // Canonical logical player world position (used by safety rules, minimap, avatar, & camera)
+    this.floorY = 0; // Supports multi-floor interior staircases (0m outdoors)
     this.position = new THREE.Vector3(0, EYE_HEIGHT, 0);
     this.viewMode = 'first'; // 'first' | 'third'
     this.isMoving = false;
@@ -263,6 +264,7 @@ export class PlayerController {
   }
 
   syncCameraToPosition() {
+    this.position.y = this.floorY + EYE_HEIGHT;
     if (this.viewMode === 'third') {
       this._forwardVec.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
       this._forwardVec.y = 0;
@@ -273,19 +275,20 @@ export class PlayerController {
       }
       // Position camera smoothly behind and above the walking avatar so sneakers-to-cap are clearly visible
       const followDist = 3.6;
-      const followHeight = 2.25;
+      const followHeight = this.floorY + 2.25;
       this.camera.position.set(
         this.position.x - this._forwardVec.x * followDist,
         followHeight,
         this.position.z - this._forwardVec.z * followDist
       );
     } else {
-      this.camera.position.set(this.position.x, EYE_HEIGHT, this.position.z);
+      this.camera.position.set(this.position.x, this.floorY + EYE_HEIGHT, this.position.z);
     }
   }
 
-  setPose(x, z, headingDeg = 0) {
-    this.position.set(x, EYE_HEIGHT, z);
+  setPose(x, z, headingDeg = 0, floorY = 0) {
+    this.floorY = floorY;
+    this.position.set(x, floorY + EYE_HEIGHT, z);
     // headingDeg: 0 = North (-Z), 90 = East (+X).
     // In Three.js, yaw around +Y: yaw = 0 faces -Z; turning right (-Y) faces +X.
     // So yaw = -headingDeg * PI / 180.
@@ -404,7 +407,7 @@ export class PlayerController {
     this.lastHeadingDeg = heading;
   }
 
-  update(dt, activeBuildings, enabled = true) {
+  update(dt, activeBuildings, enabled = true, solidCircles = []) {
     if (!enabled) return;
 
     // Keyboard Q/E rotation (negative Y turns right/clockwise toward East)
@@ -447,10 +450,32 @@ export class PlayerController {
     const nextX = this.position.x + (stepX / mag) * WALK_SPEED * throttle * dt;
     const nextZ = this.position.z + (stepZ / mag) * WALK_SPEED * throttle * dt;
 
-    // Resolve solid building collisions
-    const resolved = this._resolveBuildingCollisions(nextX, nextZ, activeBuildings);
-    this.position.set(resolved.x, EYE_HEIGHT, resolved.z);
+    // Resolve solid building collisions + solid object/person circle collisions
+    let resolved = this._resolveBuildingCollisions(nextX, nextZ, activeBuildings);
+    resolved = this._resolveSolidCircles(resolved.x, resolved.z, solidCircles);
+    this.position.set(resolved.x, this.floorY + EYE_HEIGHT, resolved.z);
     this.syncCameraToPosition();
+  }
+
+  _resolveSolidCircles(px, pz, circles) {
+    let x = px;
+    let z = pz;
+    for (const c of circles) {
+      const minDist = PLAYER_RADIUS + (c.r || 0.5);
+      const dx = x - c.x;
+      const dz = z - c.z;
+      const d = Math.hypot(dx, dz);
+      if (d < minDist) {
+        if (d > 1e-4) {
+          const push = minDist - d;
+          x += (dx / d) * push;
+          z += (dz / d) * push;
+        } else {
+          x += minDist;
+        }
+      }
+    }
+    return { x, z };
   }
 
   _resolveBuildingCollisions(px, pz, buildings) {
